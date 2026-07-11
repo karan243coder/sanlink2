@@ -2,7 +2,7 @@
 // Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
-const SERVER_URL = 'https://familiar-gertrudis-botakingtipd-f3991937.koyeb.app';
+const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
 const SEGMENT_DURATION_MS = 3 * 60 * 1000;
 
 // ---- DOM ----
@@ -428,6 +428,56 @@ function switchAuthForm(formType) {
     }
 }
 window.switchAuthForm = switchAuthForm;
+
+// ============ AUTH ACTIONS (REGISTER / LOGIN) ============
+async function handleCyberRegister(e) {
+    e.preventDefault();
+    const username = document.getElementById('regUsername').value.trim().toLowerCase();
+    const displayName = document.getElementById('regDisplayName').value.trim();
+    const password = document.getElementById('regPassword').value;
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, display_name: displayName })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast('🚀 Cyber ID Generated Successfully!');
+            loginSession(result.user);
+        } else {
+            showToast('❌ ' + (result.error || 'Registration failed'));
+        }
+    } catch (err) {
+        showToast('❌ Connection error to Cyber Space server');
+    }
+}
+window.handleCyberRegister = handleCyberRegister;
+
+async function handleCyberLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value.trim().toLowerCase();
+    const password = document.getElementById('loginPassword').value;
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast('🔑 Logged in to Cyber Space!');
+            loginSession(result.user);
+        } else {
+            showToast('❌ ' + (result.error || 'Invalid credentials'));
+        }
+    } catch (err) {
+        showToast('❌ Connection error to Cyber Space server');
+    }
+}
+window.handleCyberLogin = handleCyberLogin;
 
 // ============ NATIVE BOTTOM SHEET SEARCH MODAL ============
 function openSearchModal() {
