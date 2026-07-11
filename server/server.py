@@ -150,22 +150,39 @@ def users_search():
     
     response = []
     for r in results:
-        is_friend = False
+        status_state = "none" # 'friends', 'sent', 'received', 'none'
+        
+        # Check if mutual friends
         cursor.execute("""
-            SELECT 1 FROM friends f
+            SELECT status FROM friends f
             JOIN users u1 ON f.user_id = u1.id
             JOIN users u2 ON f.friend_id = u2.id
-            WHERE (u1.username = ? AND u2.username = ?) OR (u1.username = ? AND u2.username = ?)
-        """, (current_username, r["username"], r["username"], current_username))
-        if cursor.fetchone():
-            is_friend = True
+            WHERE u1.username = ? AND u2.username = ?
+        """, (current_username, r["username"]))
+        f_row = cursor.fetchone()
+        
+        if f_row:
+            if f_row["status"] == "accepted":
+                status_state = "friends"
+            elif f_row["status"] == "pending":
+                status_state = "sent"
+        else:
+            # Check if received request from B
+            cursor.execute("""
+                SELECT status FROM friends f
+                JOIN users u1 ON f.user_id = u1.id
+                JOIN users u2 ON f.friend_id = u2.id
+                WHERE u1.username = ? AND u2.username = ? AND f.status = 'pending'
+            """, (r["username"], current_username))
+            if cursor.fetchone():
+                status_state = "received"
             
         is_online = (time.time() - r["last_seen"]) < 30
         response.append({
             "username": r["username"],
             "display_name": r["display_name"],
-            "is_friend": is_friend,
-            "is_online": is_online
+            "is_online": is_online,
+            "status_state": status_state
         })
     conn.close()
     return jsonify({"results": response}), 200
@@ -196,10 +213,147 @@ def friends_add():
         user_id = u1["id"]
         friend_id = u2["id"]
 
-        cursor.execute("INSERT OR IGNORE INTO friends (user_id, friend_id, status) VALUES (?, ?, 'accepted')", (user_id, friend_id))
-        cursor.execute("INSERT OR IGNORE INTO friends (user_id, friend_id, status) VALUES (?, ?, 'accepted')", (friend_id, user_id))
+        # Check if already friends or request pending
+        cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
+        existing = cursor.fetchone()
+        
+        if existing:
+            if existing["status"] == "accepted":
+                return jsonify({"error": "You are already friends!"}), 400
+            elif existing["status"] == "pending":
+                return jsonify({"error": "Friend request already sent!"}), 400
+
+        # Check if B has already sent a request to A (A adds B, B had added A -> mutual accepted!)
+        cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
+        reverse_existing = cursor.fetchone()
+        
+        if reverse_existing and reverse_existing["status"] == "pending":
+            # Auto accept!
+            cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
+            cursor.execute("INSERT OR IGNORE INTO friends (user_id, friend_id, status) VALUES (?, ?, 'accepted')", (user_id, friend_id))
+            conn.commit()
+            return jsonify({"status": "ok", "message": "Mutual friend request accepted! You are now friends."}), 200
+
+        # Regular pending request
+        cursor.execute("INSERT INTO friends (user_id, friend_id, status) VALUES (?, ?, 'pending')", (user_id, friend_id))
         conn.commit()
-        return jsonify({"status": "ok", "message": "Friend added successfully!"}), 200
+        return jsonify({"status": "ok", "message": "Friend request sent!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/friends/requests-pending', methods=['GET'])
+def friends_requests_pending():
+    username = request.args.get("username", "").strip().lower()
+
+    if not username:
+        return jsonify({"error": "Username is required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.username, u.display_name
+        FROM friends f
+        JOIN users u ON f.user_id = u.id
+        JOIN users self ON f.friend_id = self.id
+        WHERE self.username = ? AND f.status = 'pending'
+    """, (username,))
+    requests_list = cursor.fetchall()
+    conn.close()
+
+    response = [dict(r) for r in requests_list]
+    return jsonify({"requests": response}), 200
+
+@app.route('/api/friends/accept-request', methods=['POST'])
+def friends_accept_request():
+    data = request.json or {}
+    username = data.get("username", "").strip().lower()
+    sender_username = data.get("sender_username", "").strip().lower()
+
+    if not username or not sender_username:
+        return jsonify({"error": "Both usernames are required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        u_b = cursor.fetchone()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (sender_username,))
+        u_a = cursor.fetchone()
+
+        if not u_b or not u_a:
+            return jsonify({"error": "User not found"}), 404
+
+        b_id = u_b["id"]
+        a_id = u_a["id"]
+
+        cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (a_id, b_id))
+        cursor.execute("INSERT OR REPLACE INTO friends (user_id, friend_id, status) VALUES (?, ?, 'accepted')", (b_id, a_id))
+        conn.commit()
+        return jsonify({"status": "ok", "message": "Friend request accepted!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/friends/decline-request', methods=['POST'])
+def friends_decline_request():
+    data = request.json or {}
+    username = data.get("username", "").strip().lower()
+    sender_username = data.get("sender_username", "").strip().lower()
+
+    if not username or not sender_username:
+        return jsonify({"error": "Both usernames are required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        u_b = cursor.fetchone()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (sender_username,))
+        u_a = cursor.fetchone()
+
+        if not u_b or not u_a:
+            return jsonify({"error": "User not found"}), 404
+
+        b_id = u_b["id"]
+        a_id = u_a["id"]
+
+        cursor.execute("DELETE FROM friends WHERE user_id = ? AND friend_id = ? AND status = 'pending'", (a_id, b_id))
+        conn.commit()
+        return jsonify({"status": "ok", "message": "Friend request declined!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/friends/remove', methods=['POST'])
+def friends_remove():
+    data = request.json or {}
+    username = data.get("username", "").strip().lower()
+    friend_username = data.get("friend_username", "").strip().lower()
+
+    if not username or not friend_username:
+        return jsonify({"error": "Both usernames are required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        u1 = cursor.fetchone()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (friend_username,))
+        u2 = cursor.fetchone()
+
+        if not u1 or not u2:
+            return jsonify({"error": "User not found"}), 404
+
+        id1 = u1["id"]
+        id2 = u2["id"]
+
+        cursor.execute("DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", (id1, id2, id2, id1))
+        conn.commit()
+        return jsonify({"status": "ok", "message": "Friend removed successfully!"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -219,7 +373,7 @@ def friends_list():
         FROM friends f
         JOIN users self ON f.user_id = self.id
         JOIN users u ON f.friend_id = u.id
-        WHERE self.username = ?
+        WHERE self.username = ? AND f.status = 'accepted'
     """, (username,))
     friends = cursor.fetchall()
     conn.close()

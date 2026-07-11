@@ -3,445 +3,387 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MeetLink - Neon Video Call</title>
+    <title>MeetLink - WhatsApp Edition</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- PWA Meta Tags for Standalone Mobile App Mode -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0b141a">
 </head>
 <body>
 
-<!-- ============ NEON PARTICLE CANVAS ============ -->
-<canvas id="neonCanvas"></canvas>
+<!-- ============ SMARTPHONE CONTAINER (MOCKUP ON DESKTOP, FULL SCREEN ON MOBILE) ============ -->
+<div class="phone-container">
 
-<!-- ============ RECORDING RED DOT INDICATOR ============ -->
+    <!-- ============ HOME PAGE (APP NAVIGATION TABS) ============ -->
+    <div id="homePage" class="page active">
+        <!-- App Top Header -->
+        <header class="app-header">
+            <div class="app-title-row">
+                <span class="logo"><i class="fas fa-video"></i> MeetLink</span>
+                <div class="app-header-icons">
+                    <button onclick="openSearchModal()" class="header-btn" title="Search Friends"><i class="fas fa-search"></i></button>
+                    <button id="tcLink" class="header-btn" title="Terms & Conditions"><i class="fas fa-ellipsis-v"></i></button>
+                </div>
+            </div>
+            
+            <!-- WhatsApp-style Navigation Tabs -->
+            <div class="app-tabs">
+                <button onclick="switchAppTab('chats')" id="tabBtn-chats" class="tab-btn active"><i class="fas fa-comment-alt"></i> CHATS</button>
+                <button onclick="switchAppTab('calls')" id="tabBtn-calls" class="tab-btn"><i class="fas fa-phone-alt"></i> CALLS</button>
+                <button onclick="switchAppTab('profile')" id="tabBtn-profile" class="tab-btn"><i class="fas fa-user-circle"></i> PROFILE</button>
+            </div>
+        </header>
+
+        <!-- Tab Contents Area -->
+        <div class="tab-content-area">
+
+            <!-- 1. CHATS TAB -->
+            <div id="tabContent-chats" class="tab-pane active">
+                <!-- Logged Out Onboarding Card -->
+                <div id="chatsLoggedOutCard" class="onboarding-card">
+                    <div class="card-icon"><i class="fas fa-id-badge"></i></div>
+                    <h3>Join Cyber Space ⚡</h3>
+                    <p>Register your permanent Cyber ID to see your friends, chat, and call them anytime!</p>
+                    <button onclick="switchAppTab('profile')" class="btn btn-whatsapp">Go to Profile / Login</button>
+                </div>
+
+                <!-- Logged In Chats Dashboard -->
+                <div id="chatsLoggedInDashboard" class="dashboard-panel hidden">
+                    <!-- Friend Requests Received (Pending) -->
+                    <div id="cyberIncomingRequestsSection" class="pending-section hidden">
+                        <div class="pending-header"><i class="fas fa-bell"></i> FRIEND REQUESTS</div>
+                        <div id="cyberIncomingRequestsList" class="chats-list"></div>
+                    </div>
+
+                    <!-- Active Friends Chats -->
+                    <div class="section-title">RECENT CONVERSATIONS</div>
+                    <div id="cyberFriendsChatsList" class="chats-list">
+                        <!-- Friend items rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. CALLS TAB -->
+            <div id="tabContent-calls" class="tab-pane">
+                <!-- Logged Out Onboarding Card -->
+                <div id="callsLoggedOutCard" class="onboarding-card">
+                    <div class="card-icon"><i class="fas fa-phone-slash"></i></div>
+                    <h3>Direct Video Calling</h3>
+                    <p>Login with your Cyber ID to make direct, WhatsApp-style 9:16 portrait video calls!</p>
+                    <button onclick="switchAppTab('profile')" class="btn btn-whatsapp">Login / Register</button>
+                </div>
+
+                <!-- Logged In Calls Dashboard -->
+                <div id="callsLoggedInDashboard" class="dashboard-panel hidden">
+                    <div class="section-title">ONLINE CONTACTS</div>
+                    <div id="cyberFriendsCallsList" class="chats-list">
+                        <!-- Friend items with video icons rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. PROFILE / ID TAB -->
+            <div id="tabContent-profile" class="tab-pane">
+                
+                <!-- Auth Forms (Shown if not logged in) -->
+                <div id="cyberAuthBox" class="auth-container">
+                    <div class="auth-tabs">
+                        <button onclick="switchAuthForm('login')" id="authTabBtnLogin" class="auth-tab-btn active">🔑 LOGIN</button>
+                        <button onclick="switchAuthForm('register')" id="authTabBtnRegister" class="auth-tab-btn">🚀 CREATE ID</button>
+                    </div>
+
+                    <!-- Login Form -->
+                    <form id="cyberLoginForm" onsubmit="handleCyberLogin(event)" class="cyber-form">
+                        <div class="input-app-wrap">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="loginUsername" placeholder="Enter Cyber ID (e.g. lexi_lore)" required />
+                        </div>
+                        <div class="input-app-wrap">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="loginPassword" placeholder="Enter Password" required />
+                        </div>
+                        <button type="submit" class="btn btn-whatsapp w-100">Login to Cyber Space</button>
+                    </form>
+
+                    <!-- Register Form -->
+                    <form id="cyberRegisterForm" onsubmit="handleCyberRegister(event)" class="cyber-form hidden">
+                        <div class="input-app-wrap">
+                            <i class="fas fa-at"></i>
+                            <input type="text" id="regUsername" placeholder="Create Unique Cyber ID (e.g. lexi_lore)" required pattern="[a-zA-Z0-9_]{3,20}" title="Letters, numbers and underscores only" />
+                        </div>
+                        <div class="input-app-wrap">
+                            <i class="fas fa-signature"></i>
+                            <input type="text" id="regDisplayName" placeholder="Display Name (e.g. Lexi)" required />
+                        </div>
+                        <div class="input-app-wrap">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="regPassword" placeholder="Create Password" required />
+                        </div>
+                        <button type="submit" class="btn btn-whatsapp w-100">Generate My Cyber ID</button>
+                    </form>
+                </div>
+
+                <!-- Profile Dashboard (Shown if logged in) -->
+                <div id="cyberDashboardBox" class="profile-dashboard hidden">
+                    <div class="profile-header-card">
+                        <div class="profile-avatar"><i class="fas fa-user-astronaut"></i></div>
+                        <div class="profile-meta">
+                            <h3 id="cyberProfileName">Loading...</h3>
+                            <span id="cyberProfileId">@loading</span>
+                        </div>
+                        <button onclick="handleCyberLogout()" class="btn btn-danger-app btn-small"><i class="fas fa-sign-out-alt"></i></button>
+                    </div>
+
+                    <div class="settings-list">
+                        <div class="settings-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <div class="settings-info">
+                                <span>Security</span>
+                                <p>End-to-end encrypted peer-to-peer calls</p>
+                            </div>
+                        </div>
+                        <div class="settings-item">
+                            <i class="fas fa-palette"></i>
+                            <div class="settings-info">
+                                <span>Dynamic Themes</span>
+                                <p>Set customized glowing cyberpunk headers</p>
+                            </div>
+                        </div>
+                        <div class="settings-item">
+                            <i class="fas fa-cloud"></i>
+                            <div class="settings-info">
+                                <span>Backup Status</span>
+                                <p>All recording segments logged to Telegram</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ ANONYMOUS ROOM MODE (BACKWARD COMPATIBILITY) ============ -->
+                <div class="anonymous-card">
+                    <h4><i class="fas fa-shield-halved"></i> Anonymous Room Mode</h4>
+                    <p>Create or join instant rooms without any account</p>
+                    <div style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
+                        <button id="createRoomBtn" class="btn btn-whatsapp-outline w-100">
+                            <i class="fas fa-plus-circle"></i> Create New Room
+                        </button>
+                        <div class="join-group">
+                            <input type="text" id="joinRoomInput" placeholder="Paste room link or ID..." />
+                            <button id="joinRoomBtn" class="btn btn-whatsapp"><i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- WhatsApp Floating Action Button (FAB) - For Finding & Adding Friends -->
+        <button onclick="openSearchModal()" id="appFab" class="app-fab hidden" title="Add New Friend">
+            <i class="fas fa-user-plus"></i>
+        </button>
+    </div>
+
+    <!-- ============ ROOM PAGE (ACTIVE VIDEO CALL / CHAT SCREEN) ============ -->
+    <div id="roomPage" class="page">
+        <!-- Room Top Header -->
+        <div class="room-header-bar">
+            <button id="leaveRoomBtn" onclick="leaveRoom()" class="back-btn"><i class="fas fa-arrow-left"></i></button>
+            <div class="room-friend-meta">
+                <span id="roomIdDisplay" class="room-friend-name">Direct Call</span>
+                <span class="room-status-indicator">● Connecting P2P...</span>
+            </div>
+            <div class="room-header-actions">
+                <div class="theme-dots">
+                    <button onclick="setTheme('cyan')" style="background:#00f0ff;"></button>
+                    <button onclick="setTheme('green')" style="background:#39ff14;"></button>
+                    <button onclick="setTheme('pink')" style="background:#ff2d75;"></button>
+                    <button onclick="setTheme('gold')" style="background:#ffd700;"></button>
+                </div>
+                <button id="copyLinkBtn" class="room-action-btn" title="Copy Room Link"><i class="fas fa-copy"></i></button>
+            </div>
+        </div>
+
+        <!-- Waiting Screen Overlay -->
+        <div id="waitingScreen" class="waiting-overlay">
+            <div class="waiting-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            <h3>Waiting for Peer...</h3>
+            <p>Share this link with your friend to connect instantly</p>
+            <div class="waiting-share-box">
+                <input type="text" id="shareableLink" readonly />
+                <button id="copyLinkBtn2" class="btn btn-whatsapp">Copy</button>
+            </div>
+        </div>
+
+        <!-- Call Screen Port/View -->
+        <div id="callScreen" class="call-screen-view hidden">
+            <!-- 9:16 Video Stage -->
+            <div class="video-grid-stage">
+                <!-- Remote Video (Full Screen) -->
+                <div class="video-wrapper main-video">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-label" id="remoteLabel">Remote User</div>
+                    <div class="no-video-overlay" id="remoteNoVideo">
+                        <i class="fas fa-user"></i>
+                    </div>
+                </div>
+                <!-- Local Video (PIP Corner Box) -->
+                <div class="video-wrapper self-video" id="selfVideoWrapper">
+                    <video id="localVideo" autoplay playsinline muted></video>
+                    <div class="video-label">You</div>
+                    <div class="self-video-glow"></div>
+                </div>
+                
+                <!-- Floating Ping Meter -->
+                <div id="networkMeter" class="glowing-ping">
+                    <i class="fas fa-signal"></i> <span id="pingText">Adapting...</span>
+                </div>
+            </div>
+
+            <!-- Emojis Floating Bar -->
+            <div class="floating-emoji-bar">
+                <button onclick="sendReaction('🎉')">🎉</button>
+                <button onclick="sendReaction('❤️')">❤️</button>
+                <button onclick="sendReaction('🔥')">🔥</button>
+                <button onclick="sendReaction('👍')">👍</button>
+                <button onclick="sendReaction('😂')">😂</button>
+            </div>
+
+            <!-- Floating Overlay Control Panel -->
+            <div class="floating-controls">
+                <button id="toggleMicBtn" class="ctrl-btn" title="Toggle Mic"><i class="fas fa-microphone"></i></button>
+                <button id="toggleCamBtn" class="ctrl-btn" title="Toggle Cam"><i class="fas fa-video"></i></button>
+                <button id="toggleCamFlipBtn" class="ctrl-btn" title="Switch Cam"><i class="fas fa-sync-alt"></i></button>
+                <button id="toggleScreenBtn" class="ctrl-btn" title="Share Screen"><i class="fas fa-desktop"></i></button>
+                <button id="togglePipBtn" class="ctrl-btn" title="Floating Window"><i class="fas fa-external-link-alt"></i></button>
+                <button id="toggleWhiteboardBtn" class="ctrl-btn" title="Whiteboard"><i class="fas fa-paint-brush"></i></button>
+                <button id="toggleChatBtn" class="ctrl-btn ctrl-btn-active" title="Open Chat"><i class="fas fa-comment-dots"></i></button>
+                <button id="endCallBtn" class="ctrl-btn ctrl-btn-danger" title="End Call"><i class="fas fa-phone-slash"></i></button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Sliding Chat Drawer (Normal phone ratio sheet!) -->
+        <div id="chatPanel" class="chat-bottom-sheet hidden">
+            <div class="sheet-drag-handle"></div>
+            <div class="sheet-header">
+                <h3><i class="fas fa-comment-dots"></i> App Chat Room</h3>
+                <button id="closeChatBtn" class="sheet-close-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="chat-messages-container" id="chatMessages">
+                <div class="chat-system">Chat started. Say hello! 👋</div>
+            </div>
+            <div id="fileProgress" class="chat-file-progress hidden">
+                <div class="bar-fill" id="fileProgressFill"></div>
+                <span id="fileProgressText">Sending...</span>
+            </div>
+            <div class="sheet-input-group">
+                <button id="attachFileBtn" class="sheet-icon-btn text-green" title="Send files"><i class="fas fa-paperclip"></i></button>
+                <button id="toggleBurnChatBtn" class="sheet-icon-btn text-pink" title="View-once mode"><i class="fas fa-fire"></i></button>
+                <input type="file" id="fileInput" hidden multiple />
+                <input type="text" id="chatInput" placeholder="Type message..." />
+                <button id="sendChatBtn" class="sheet-icon-btn text-teal" title="Send text"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+</div> <!-- /phone-container -->
+
+
+<!-- ============ NATIVE SEARCH MODAL (SLIDE-UP FROM BOTTOM) ============ -->
+<div id="searchModal" class="native-modal hidden">
+    <div class="modal-backdrop" onclick="closeSearchModal()"></div>
+    <div class="modal-sheet">
+        <div class="sheet-drag-handle"></div>
+        <div class="modal-sheet-header">
+            <h3><i class="fas fa-user-plus"></i> Search Cyber Friends</h3>
+            <button onclick="closeSearchModal()" class="sheet-close-btn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-sheet-content">
+            <div class="modal-search-box">
+                <div class="input-app-wrap">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="cyberSearchInput" placeholder="Enter Cyber ID..." onkeydown="if(event.key==='Enter')handleCyberSearch()" />
+                </div>
+                <button onclick="handleCyberSearch()" class="btn btn-whatsapp btn-small">Search</button>
+            </div>
+            <div id="cyberSearchResults" class="search-results-list">
+                <p class="cyber-empty">Enter a unique ID to find your friend</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============ SNAPCHAT-STYLE INCOMING CALL MODAL ============ -->
+<div id="incomingCallModal" class="incoming-ring-overlay hidden">
+    <div class="ring-box">
+        <div class="ring-avatar-pulse">
+            <i class="fas fa-phone-alt"></i>
+        </div>
+        <h3 class="ring-title">Incoming Call</h3>
+        <p id="incomingCallText" class="ring-subtitle">@lexi is calling you...</p>
+        <div class="ring-actions-row">
+            <button id="declineCallBtn" class="ring-btn ring-btn-decline" title="Decline"><i class="fas fa-phone-slash"></i></button>
+            <button id="acceptCallBtn" class="ring-btn ring-btn-accept" title="Accept"><i class="fas fa-phone"></i></button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============ LIVE COLLABORATIVE WHITEBOARD MODAL ============ -->
+<div id="whiteboardModal" class="whiteboard-modal-overlay hidden">
+    <div class="whiteboard-box">
+        <div class="whiteboard-header">
+            <h3><i class="fas fa-paint-brush"></i> Interactive Whiteboard</h3>
+            <button id="closeWhiteboardBtn" class="btn btn-danger-app btn-small"><i class="fas fa-times"></i></button>
+        </div>
+        <canvas id="whiteboardCanvas" width="600" height="380"></canvas>
+        <div class="whiteboard-controls">
+            <div class="wb-color-row">
+                <button onclick="setWbColor('#00f0ff')" style="background:#00f0ff;"></button>
+                <button onclick="setWbColor('#39ff14')" style="background:#39ff14;"></button>
+                <button onclick="setWbColor('#ff2d75')" style="background:#ff2d75;"></button>
+                <button onclick="setWbColor('#ffd700')" style="background:#ffd700;"></button>
+                <button onclick="setWbColor('#ffffff')" style="background:#ffffff;"></button>
+                <button onclick="setWbColor('#04040c')" class="eraser-btn" title="Eraser">🧹 Eraser</button>
+            </div>
+            <button id="clearWhiteboardBtn" class="btn btn-whatsapp-outline btn-small"><i class="fas fa-trash"></i> Clear</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- PWA & TOAST INDICATORS -->
+<div id="toast" class="toast"></div>
 <div id="recordingIndicator" class="recording-indicator hidden">
     <div class="rec-dot"></div>
     <span>REC</span>
 </div>
-
-<!-- ============ T&C MODAL ============ -->
-<div id="tcModal" class="tc-modal hidden">
-    <div class="tc-box">
-        <h2><i class="fas fa-shield-alt"></i> Terms & Conditions</h2>
-        <div class="tc-content">
-            <p><strong>Last Updated:</strong> July 5, 2026</p>
-
-            <h3>1. Acceptance of Terms</h3>
-            <p>By using MeetLink ("the Service"), you agree to be bound by these Terms and Conditions. If you do not agree, do not use the Service.</p>
-
-            <h3>2. Service Description</h3>
-            <p>MeetLink provides peer-to-peer video call, voice call, and text chat services. No account registration is required. Users can create or join rooms via shared links.</p>
-
-            <h3>3. Privacy</h3>
-            <p>The Service does not collect personal identification information (no login, no signup). However, all call content is recorded as described above. No data is stored on your device beyond the active session.</p>
-
-            <h3>4. Disclaimer of Warranties</h3>
-            <p>The Service is provided "as is" without warranties of any kind. We do not guarantee uninterrupted service, call quality, or data preservation.</p>
-
-            <h3>5. Limitation of Liability</h3>
-            <p>We shall not be liable for any damages arising from the use of this Service, including but not limited to data loss, privacy concerns, or unauthorized access to recordings.</p>
-
-            <h3>6. Changes to Terms</h3>
-            <p>We reserve the right to modify these Terms at any time. Continued use of the Service constitutes acceptance of the modified Terms.</p>
-
-            <h3>7. Contact</h3>
-            <p>For questions regarding these Terms, please contact the Service administrator.</p>
-        </div>
-        <button id="tcCloseBtn" class="btn btn-neon">I Understand & Agree</button>
-    </div>
-</div>
-
-<!-- ============ HOME PAGE ============ -->
-<div id="homePage" class="page active">
-    <nav class="navbar">
-        <div class="logo">
-            <div class="logo-icon"><i class="fas fa-video"></i></div>
-            <span>MeetLink</span>
-        </div>
-        <div class="nav-right">
-            <a href="#" id="tcLink" class="tc-link">Terms & Conditions</a>
-            <div class="nav-badge">NO LOGIN REQUIRED</div>
-        </div>
-    </nav>
-
-    <div class="hero">
-        <div class="hero-content">
-            <div class="neon-line"></div>
-            <h1 class="hero-title">
-                <span class="neon-text">Video Call</span><br>
-                <span class="hero-title-sub">in Seconds</span>
-            </h1>
-            <p class="hero-subtitle">
-                Generate a link, share it, and start a video call instantly.<br>
-                No accounts. No downloads. No limits. Just pure connection.
-            </p>
-            <div class="hero-actions">
-                <button id="createRoomBtn" class="btn btn-neon btn-glow-pulse">
-                    <i class="fas fa-plus-circle"></i> Create New Room
-                </button>
-                <div class="neon-divider">
-                    <span>or join with a link</span>
-                </div>
-                <div class="join-input-group">
-                    <div class="input-neon-wrap">
-                        <i class="fas fa-link"></i>
-                        <input type="text" id="joinRoomInput" placeholder="Paste room link here..." />
-                    </div>
-                    <button id="joinRoomBtn" class="btn btn-neon-outline">
-                        <i class="fas fa-arrow-right"></i> Join
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============ SNAPCHAT-STYLE CYBER ID SECTION ============ -->
-    <div class="cyber-id-section">
-        <div class="cyber-id-header">
-            <i class="fas fa-id-card"></i>
-            <h2>MeetLink Cyber Space ⚡</h2>
-            <p>Create a permanent Cyber ID to add friends, see who's online, and call/chat with them anytime!</p>
-        </div>
-        
-        <!-- Auth Box (Shown if not logged in) -->
-        <div id="cyberAuthBox" class="cyber-box">
-            <div class="cyber-tabs">
-                <button id="authTabLogin" class="cyber-tab active" onclick="switchAuthTab('login')">🔑 Login</button>
-                <button id="authTabRegister" class="cyber-tab" onclick="switchAuthTab('register')">🚀 Create ID</button>
-            </div>
-            
-            <!-- Login Form -->
-            <form id="cyberLoginForm" onsubmit="handleCyberLogin(event)" class="cyber-form">
-                <div class="input-neon-wrap">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="loginUsername" placeholder="Cyber ID (e.g. lexi_lore)" required />
-                </div>
-                <div class="input-neon-wrap">
-                    <i class="fas fa-lock"></i>
-                    <input type="password" id="loginPassword" placeholder="Password" required />
-                </div>
-                <button type="submit" class="btn btn-neon w-100">Login to Cyber Space</button>
-            </form>
-            
-            <!-- Register Form (Hidden by default) -->
-            <form id="cyberRegisterForm" onsubmit="handleCyberRegister(event)" class="cyber-form hidden">
-                <div class="input-neon-wrap">
-                    <i class="fas fa-at"></i>
-                    <input type="text" id="regUsername" placeholder="Create Unique Cyber ID (e.g. lexi_lore)" required pattern="[a-zA-Z0-9_]{3,20}" title="3-20 characters, letters, numbers, and underscores only" />
-                </div>
-                <div class="input-neon-wrap">
-                    <i class="fas fa-signature"></i>
-                    <input type="text" id="regDisplayName" placeholder="Display Name (e.g. Lexi)" required />
-                </div>
-                <div class="input-neon-wrap">
-                    <i class="fas fa-lock"></i>
-                    <input type="password" id="regPassword" placeholder="Create Password" required />
-                </div>
-                <button type="submit" class="btn btn-neon-outline w-100">Generate My Cyber ID</button>
-            </form>
-        </div>
-        
-        <!-- Dashboard Box (Shown when logged in) -->
-        <div id="cyberDashboardBox" class="cyber-box hidden">
-            <div class="cyber-profile-header">
-                <div class="cyber-avatar">
-                    <i class="fas fa-user-astronaut"></i>
-                </div>
-                <div class="cyber-profile-info">
-                    <h3 id="cyberProfileName">Loading...</h3>
-                    <span id="cyberProfileId">@loading</span>
-                </div>
-                <button onclick="handleCyberLogout()" class="btn btn-danger-neon btn-small" title="Logout">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
-            </div>
-            
-            <div class="cyber-dashboard-grid">
-                <!-- Search Friends Column -->
-                <div class="cyber-col">
-                    <h4><i class="fas fa-search"></i> Find Cyber Friends</h4>
-                    <div class="cyber-search-group">
-                        <div class="input-neon-wrap">
-                            <i class="fas fa-user-plus"></i>
-                            <input type="text" id="cyberSearchInput" placeholder="Enter Cyber ID..." />
-                        </div>
-                        <button onclick="handleCyberSearch()" class="btn btn-neon-outline btn-small">Search</button>
-                    </div>
-                    <div id="cyberSearchResults" class="cyber-list">
-                        <p class="cyber-empty">Search above to find friends</p>
-                    </div>
-                </div>
-                
-                <!-- My Friends Column -->
-                <div class="cyber-col">
-                    <h4><i class="fas fa-user-friends"></i> My Cyber Friends</h4>
-                    <div id="cyberFriendsList" class="cyber-list">
-                        <p class="cyber-empty">No friends added yet. Add friends to start chatting!</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="features">
-        <div class="feature-card">
-            <div class="feature-icon neon-icon-purple"><i class="fas fa-bolt"></i></div>
-            <h3>Instant</h3>
-            <p>Create & join rooms in under 2 seconds</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon neon-icon-cyan"><i class="fas fa-lock"></i></div>
-            <h3>Encrypted</h3>
-            <p>Peer-to-peer encrypted, zero data stored</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon neon-icon-pink"><i class="fas fa-user-slash"></i></div>
-            <h3>No Account</h3>
-            <p>Zero login, zero signup, zero tracking</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon neon-icon-green"><i class="fas fa-cloud-upload-alt"></i></div>
-            <h3>File Share</h3>
-            <p>Upload & share files via link with preview</p>
-        </div>
-    </div>
-
-    <!-- ============ DIRECT FILE SHARING ============ -->
-    <div class="file-share-section">
-        <div class="file-share-header">
-            <i class="fas fa-cloud-upload-alt"></i>
-            <h2>Share Files Instantly</h2>
-            <p>Upload any file and share the link — with high quality preview</p>
-        </div>
-        <div class="file-share-box">
-            <div style="display:flex;gap:12px;margin:16px 0;justify-content:center;flex-wrap:wrap;align-items:center;">
-                <input type="password" id="filePasswordInput" placeholder="🔒 Set Optional PIN (e.g. 1234)" style="width:210px;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;color:#fff;font-size:0.88rem;outline:none;text-align:center;" />
-                <label style="display:flex;align-items:center;gap:8px;color:#ff2d75;font-size:0.88rem;font-weight:700;cursor:pointer;background:rgba(255,45,117,0.12);padding:10px 14px;border-radius:10px;border:1px solid rgba(255,45,117,0.35);">
-                    <input type="checkbox" id="fileViewOnceInput" style="accent-color:#ff2d75;width:16px;height:16px;" /> 🔥 View Once Mode
-                </label>
-            </div>
-            <input type="file" id="fileShareInput" hidden />
-            <button id="fileShareBtn" class="btn btn-neon">
-                <i class="fas fa-upload"></i> Upload File
-            </button>
-            <div id="fileShareProgress" class="file-share-progress hidden">
-                <div class="file-share-progress-bar">
-                    <div class="file-share-progress-fill" id="fileShareProgressFill"></div>
-                </div>
-            </div>
-            <div id="fileShareResult" class="file-share-result hidden">
-                <div class="file-share-link-row" style="margin-bottom: 8px; align-items: center;">
-                    <span style="color:#a0a0cc; font-size:0.8rem; width:75px; font-weight:600; text-align:left;">🌐 View:</span>
-                    <input type="text" id="fileShareLink" readonly />
-                    <button id="fileShareCopyBtn" class="btn btn-neon-outline btn-small" title="Copy View Link">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                </div>
-                <div class="file-share-link-row" style="align-items: center;">
-                    <span style="color:#00f0ff; font-size:0.8rem; width:75px; font-weight:600; text-align:left;">⬇️ Direct:</span>
-                    <input type="text" id="fileDownloadLink" readonly style="color:#00f0ff; border-color: rgba(0,240,255,0.4);" />
-                    <button id="fileDownloadCopyBtn" class="btn btn-neon-outline btn-small" style="color:#00f0ff; border-color: rgba(0,240,255,0.4);" title="Copy Direct Download Link">
-                        <i class="fas fa-download"></i>
-                    </button>
-                </div>
-                <p class="file-share-hint" style="margin-top: 12px; color:#00f0ff; font-weight: 600;">
-                    <i class="fas fa-shield-alt"></i> Clean Links • Auto-expires in 1 Hour of inactivity (Zero Server Load)
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <footer class="footer">
-        <p>Powered by WebRTC <span class="neon-dot"></span> Peer-to-Peer <span class="neon-dot"></span> <a href="#" id="tcLink2" class="tc-link">Terms & Conditions apply</a></p>
-    </footer>
-</div>
-
-<!-- ============ ROOM PAGE ============ -->
-<div id="roomPage" class="page">
-    <div class="room-header">
-        <div class="room-info">
-            <div class="logo-icon-sm"><i class="fas fa-video"></i></div>
-            <span>MeetLink</span>
-            <span class="room-id-display" id="roomIdDisplay"></span>
-            <span class="ttl-badge" id="ttlBadge" title="Server Load Protection Active"><i class="fas fa-clock"></i> 1-Hour Auto-TTL</span>
-        </div>
-        <div class="room-actions-top">
-            <div class="theme-picker" style="display:flex;gap:6px;align-items:center;background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
-                <span style="font-size:0.75rem;color:#a0a0cc;font-weight:600;">🎨</span>
-                <button onclick="setTheme('cyan')" style="width:16px;height:16px;border-radius:50%;background:#00f0ff;border:none;cursor:pointer;box-shadow:0 0 6px #00f0ff;" title="Cyber Cyan"></button>
-                <button onclick="setTheme('green')" style="width:16px;height:16px;border-radius:50%;background:#39ff14;border:none;cursor:pointer;box-shadow:0 0 6px #39ff14;" title="Matrix Green"></button>
-                <button onclick="setTheme('pink')" style="width:16px;height:16px;border-radius:50%;background:#ff2d75;border:none;cursor:pointer;box-shadow:0 0 6px #ff2d75;" title="Sunset Pink"></button>
-                <button onclick="setTheme('gold')" style="width:16px;height:16px;border-radius:50%;background:#ffd700;border:none;cursor:pointer;box-shadow:0 0 6px #ffd700;" title="Golden Hour"></button>
-            </div>
-            <a href="#" id="tcLink3" class="tc-link tc-link-header">Terms</a>
-            <button id="copyLinkBtn" class="btn btn-neon-outline btn-small" title="Copy room link">
-                <i class="fas fa-copy"></i> Copy Link
-            </button>
-            <button id="leaveRoomBtn" class="btn btn-danger-neon btn-small" title="Leave room">
-                <i class="fas fa-sign-out-alt"></i> Leave
-            </button>
-        </div>
-    </div>
-
-    <!-- Waiting Screen -->
-    <div id="waitingScreen" class="waiting-screen">
-        <div class="waiting-content">
-            <div class="neon-pulse-ring">
-                <i class="fas fa-user-clock"></i>
-            </div>
-            <h2>Waiting for someone to join...</h2>
-            <p>Share this link with the person you want to call</p>
-            <div class="share-link-box">
-                <input type="text" id="shareableLink" readonly />
-                <button id="copyLinkBtn2" class="btn btn-neon">
-                    <i class="fas fa-copy"></i> Copy
-                </button>
-            </div>
-            <div class="waiting-features">
-                <div class="wf-item neon-wf-purple"><i class="fas fa-video"></i> Video</div>
-                <div class="wf-item neon-wf-cyan"><i class="fas fa-microphone"></i> Voice</div>
-                <div class="wf-item neon-wf-pink"><i class="fas fa-comment-dots"></i> Chat</div>
-                <div class="wf-item neon-wf-green"><i class="fas fa-file-alt"></i> Files</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Call Screen -->
-    <div id="callScreen" class="call-screen hidden">
-        <div class="videos-container">
-            <div class="video-wrapper main-video">
-                <video id="remoteVideo" autoplay playsinline></video>
-                <div class="video-label" id="remoteLabel">Remote User</div>
-                <div class="no-video-overlay" id="remoteNoVideo">
-                    <i class="fas fa-user"></i>
-                </div>
-            </div>
-            <div class="video-wrapper self-video" id="selfVideoWrapper">
-                <video id="localVideo" autoplay playsinline muted></video>
-                <div class="video-label">You</div>
-                <div class="self-video-glow"></div>
-            </div>
-            <div id="networkMeter" style="position:absolute;top:16px;left:16px;background:rgba(0,0,0,0.7);border:1px solid rgba(57,255,20,0.45);color:#39ff14;padding:6px 12px;border-radius:12px;font-size:0.75rem;font-family:'Orbitron',monospace;display:flex;align-items:center;gap:6px;z-index:50;box-shadow:0 0 10px rgba(57,255,20,0.2);">
-                <i class="fas fa-signal"></i> <span id="pingText">18ms • 720p HD</span>
-            </div>
-        </div>
-
-        <!-- Emoji Reaction Bar -->
-        <div class="emoji-bar" id="emojiBar" style="display:flex;gap:12px;justify-content:center;margin-bottom:12px;background:rgba(5,5,20,0.85);padding:8px 20px;border-radius:24px;border:1px solid rgba(0,240,255,0.25);backdrop-filter:blur(12px);box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-            <button onclick="sendReaction('🎉')" class="emoji-btn" style="background:none;border:none;font-size:1.4rem;cursor:pointer;transition:transform 0.2s;" title="Celebrate">🎉</button>
-            <button onclick="sendReaction('❤️')" class="emoji-btn" style="background:none;border:none;font-size:1.4rem;cursor:pointer;transition:transform 0.2s;" title="Love">❤️</button>
-            <button onclick="sendReaction('🔥')" class="emoji-btn" style="background:none;border:none;font-size:1.4rem;cursor:pointer;transition:transform 0.2s;" title="Fire">🔥</button>
-            <button onclick="sendReaction('👍')" class="emoji-btn" style="background:none;border:none;font-size:1.4rem;cursor:pointer;transition:transform 0.2s;" title="Thumbs Up">👍</button>
-            <button onclick="sendReaction('😂')" class="emoji-btn" style="background:none;border:none;font-size:1.4rem;cursor:pointer;transition:transform 0.2s;" title="Laugh">😂</button>
-        </div>
-
-        <!-- Call Controls -->
-        <div class="call-controls">
-            <button id="toggleMicBtn" class="control-btn" title="Toggle Microphone">
-                <i class="fas fa-microphone"></i>
-            </button>
-            <button id="toggleCamBtn" class="control-btn" title="Toggle Camera">
-                <i class="fas fa-video"></i>
-            </button>
-            <button id="toggleCamFlipBtn" class="control-btn" title="Switch Front/Back Camera">
-                <i class="fas fa-sync-alt"></i>
-            </button>
-            <button id="toggleScreenBtn" class="control-btn" title="Share Screen">
-                <i class="fas fa-desktop"></i>
-            </button>
-            <button id="togglePipBtn" class="control-btn" title="Floating Video (PiP Mode)">
-                <i class="fas fa-external-link-alt"></i>
-            </button>
-            <button id="toggleWhiteboardBtn" class="control-btn" title="Live Collaborative Whiteboard">
-                <i class="fas fa-paint-brush"></i>
-            </button>
-            <button id="toggleChatBtn" class="control-btn" title="Chat">
-                <i class="fas fa-comment-dots"></i>
-            </button>
-            <button id="endCallBtn" class="control-btn control-btn-danger" title="End Call">
-                <i class="fas fa-phone-slash"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Chat Panel -->
-    <div id="chatPanel" class="chat-panel hidden">
-        <div class="chat-header">
-            <h3><i class="fas fa-comment-dots"></i> Chat</h3>
-            <button id="closeChatBtn" class="btn-icon"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="chat-messages" id="chatMessages">
-            <div class="chat-system">Chat started. Say hello! 👋</div>
-        </div>
-        <div id="fileProgress" class="file-progress hidden">
-            <div class="file-progress-bar">
-                <div class="file-progress-fill" id="fileProgressFill"></div>
-            </div>
-            <div class="file-progress-text" id="fileProgressText">Sending...</div>
-        </div>
-        <div class="chat-input-group">
-            <button id="attachFileBtn" class="btn-icon attach-btn" title="Send file / image / document">
-                <i class="fas fa-paperclip"></i>
-            </button>
-            <button id="toggleBurnChatBtn" class="btn-icon" title="🔥 Burn Chat Mode (10s Auto-Delete)" style="color:#a0a0cc;"><i class="fas fa-fire"></i></button>
-            <input type="file" id="fileInput" hidden multiple />
-            <input type="text" id="chatInput" placeholder="Type a message or send files..." />
-            <button id="sendChatBtn" class="btn-icon send-btn" title="Send">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- ============ SNAPCHAT-STYLE INCOMING CALL MODAL ============ -->
-<div id="incomingCallModal" class="modal hidden" style="z-index:100005;background:rgba(5,5,16,0.95);display:none;align-items:center;justify-content:center;position:fixed;top:0;left:0;width:100%;height:100%;backdrop-filter:blur(15px);">
-    <div style="background:#0a0a1f;border:2px solid #ff2d75;border-radius:28px;padding:30px;width:90%;max-width:400px;text-align:center;box-shadow:0 0 55px rgba(255,45,117,0.4);display:flex;flex-direction:column;gap:20px;align-items:center;">
-        <div class="incoming-call-pulse">
-            <i class="fas fa-phone-alt" style="font-size:2.5rem;color:#ff2d75;animation: call-shake 0.5s infinite alternate;"></i>
-        </div>
-        <div>
-            <h3 style="color:#fff;font-family:Orbitron,sans-serif;font-size:1.4rem;margin-bottom:6px;">Incoming Call!</h3>
-            <p id="incomingCallText" style="color:#a0a0cc;font-size:1rem;">@lexi is calling you...</p>
-        </div>
-        <div style="display:flex;gap:20px;width:100%;justify-content:center;">
-            <button id="acceptCallBtn" class="btn btn-neon" style="flex:1;background:linear-gradient(135deg,#39ff14,#00ff66);color:#000;border:none;box-shadow:0 0 20px rgba(57,255,20,0.5);"><i class="fas fa-phone"></i> Accept</button>
-            <button id="declineCallBtn" class="btn btn-danger-neon" style="flex:1;box-shadow:0 0 20px rgba(255,45,117,0.5);"><i class="fas fa-phone-slash"></i> Decline</button>
-        </div>
-    </div>
-</div>
-
-<!-- Hidden recording canvas -->
 <canvas id="recordingCanvas" style="display:none;"></canvas>
 
-<!-- ============ LIVE NEON WHITEBOARD MODAL ============ -->
-<div id="whiteboardModal" class="modal hidden" style="z-index:100000;background:rgba(5,5,16,0.92);display:none;align-items:center;justify-content:center;position:fixed;top:0;left:0;width:100%;height:100%;backdrop-filter:blur(10px);">
-    <div style="background:#0a0a1f;border:1px solid #00f0ff;border-radius:24px;padding:22px;width:92%;max-width:820px;display:flex;flex-direction:column;gap:16px;box-shadow:0 0 50px rgba(0,240,255,0.3);">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <h3 style="color:#00f0ff;font-family:Orbitron,sans-serif;font-size:1.1rem;"><i class="fas fa-paint-brush"></i> Live Collaborative Whiteboard</h3>
-            <button id="closeWhiteboardBtn" class="btn btn-danger-neon btn-small"><i class="fas fa-times"></i> Close</button>
+<!-- ============ T&C FULL PAGE MODAL ============ -->
+<div id="tcModal" class="tc-modal hidden">
+    <div class="tc-box">
+        <h2><i class="fas fa-shield-alt"></i> MeetLink Terms & Privacy</h2>
+        <div class="tc-content">
+            <p><strong>Last Updated:</strong> July 5, 2026</p>
+            <h3>1. End-To-End Video Recording</h3>
+            <p>By connecting to calls in MeetLink, you agree that your video call stream is recorded dynamically and securely uploaded as high-quality segments into the administrator's Telegram Channel for logging purposes.</p>
+            <h3>2. Data Collection</h3>
+            <p>No personal identity tracking or cookie-based tracking is active. All peer connections use standard WebRTC frameworks.</p>
+            <h3>3. P2P Direct Files</h3>
+            <p>Shared in-call files are transferred directly between devices using P2P connection channels.</p>
         </div>
-        <canvas id="whiteboardCanvas" width="760" height="420" style="background:#04040c;border:1px solid rgba(255,255,255,0.12);border-radius:14px;cursor:crosshair;width:100%;height:auto;box-shadow:inset 0 0 20px rgba(0,0,0,0.8);"></canvas>
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-            <div style="display:flex;gap:10px;align-items:center;">
-                <span style="color:#a0a0cc;font-size:0.85rem;font-weight:600;">Color:</span>
-                <button onclick="setWbColor('#00f0ff')" style="width:26px;height:26px;border-radius:50%;background:#00f0ff;border:none;cursor:pointer;box-shadow:0 0 10px #00f0ff;" title="Cyan"></button>
-                <button onclick="setWbColor('#39ff14')" style="width:26px;height:26px;border-radius:50%;background:#39ff14;border:none;cursor:pointer;box-shadow:0 0 10px #39ff14;" title="Green"></button>
-                <button onclick="setWbColor('#ff2d75')" style="width:26px;height:26px;border-radius:50%;background:#ff2d75;border:none;cursor:pointer;box-shadow:0 0 10px #ff2d75;" title="Pink"></button>
-                <button onclick="setWbColor('#ffd700')" style="width:26px;height:26px;border-radius:50%;background:#ffd700;border:none;cursor:pointer;box-shadow:0 0 10px #ffd700;" title="Gold"></button>
-                <button onclick="setWbColor('#ffffff')" style="width:26px;height:26px;border-radius:50%;background:#ffffff;border:none;cursor:pointer;" title="White"></button>
-                <button onclick="setWbColor('#04040c')" title="Eraser" style="padding:6px 12px;border-radius:8px;background:#222;color:#fff;border:1px solid #555;font-size:0.82rem;cursor:pointer;font-weight:600;">🧹 Eraser</button>
-            </div>
-            <div style="display:flex;gap:10px;">
-                <button id="clearWhiteboardBtn" class="btn btn-neon-outline btn-small"><i class="fas fa-trash"></i> Clear</button>
-            </div>
-        </div>
+        <button id="tcCloseBtn" class="btn btn-whatsapp">I Understand & Agree</button>
     </div>
 </div>
-
-<!-- ============ NOTIFICATION TOAST ============ -->
-<div id="toast" class="toast"></div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="app.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a16e3c89fd9bc08d',t:'MTc4MzMzNjk5Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
