@@ -2,7 +2,7 @@
 // Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
-const SERVER_URL = 'https://familiar-gertrudis-botakingtipd-f3991937.koyeb.app';
+const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
 const SEGMENT_DURATION_MS = 3 * 60 * 1000;
 
 // ---- DOM ----
@@ -54,11 +54,6 @@ let canvasDrawInterval = null, audioCtx = null, combinedStream = null;
 let mediaRecorder = null, recordedChunks = [];
 let segmentNumber = 0, recordingTimer = null, isCallActive = false;
 let totalRecordingSize = 0, currentCallMode = 'video'; // 'video' or 'audio'
-
-// File Sharing Pending State
-let pendingSendFile = null;
-let currentFileSendMode = 'normal'; // 'normal' or 'viewonce'
-
 const CHUNK_SIZE = 16384;
 
 // ============ T&C MODAL ============
@@ -239,6 +234,7 @@ function setupRecordingStreams() {
                 ctx.fillStyle = '#8696a0';
                 ctx.fillText('WhatsApp Voice Call Active...', RW / 2, RH / 2 + 65);
             } else {
+                // Remote Video
                 try {
                     if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.videoWidth) {
                         drawCover(ctx, remoteVideo, 0, 0, RW, RH);
@@ -429,56 +425,6 @@ function switchAuthForm(formType) {
 }
 window.switchAuthForm = switchAuthForm;
 
-// ============ AUTH ACTIONS (REGISTER / LOGIN) ============
-async function handleCyberRegister(e) {
-    e.preventDefault();
-    const username = document.getElementById('regUsername').value.trim().toLowerCase();
-    const displayName = document.getElementById('regDisplayName').value.trim();
-    const password = document.getElementById('regPassword').value;
-
-    try {
-        const resp = await fetch(`${SERVER_URL}/api/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, display_name: displayName })
-        });
-        const result = await resp.json();
-        if (resp.ok && result.status === 'ok') {
-            showToast('🚀 Cyber ID Generated Successfully!');
-            loginSession(result.user);
-        } else {
-            showToast('❌ ' + (result.error || 'Registration failed'));
-        }
-    } catch (err) {
-        showToast('❌ Connection error to Cyber Space server');
-    }
-}
-window.handleCyberRegister = handleCyberRegister;
-
-async function handleCyberLogin(e) {
-    e.preventDefault();
-    const username = document.getElementById('loginUsername').value.trim().toLowerCase();
-    const password = document.getElementById('loginPassword').value;
-
-    try {
-        const resp = await fetch(`${SERVER_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        const result = await resp.json();
-        if (resp.ok && result.status === 'ok') {
-            showToast('🔑 Logged in to Cyber Space!');
-            loginSession(result.user);
-        } else {
-            showToast('❌ ' + (result.error || 'Invalid credentials'));
-        }
-    } catch (err) {
-        showToast('❌ Connection error to Cyber Space server');
-    }
-}
-window.handleCyberLogin = handleCyberLogin;
-
 // ============ NATIVE BOTTOM SHEET SEARCH MODAL ============
 function openSearchModal() {
     if (!currentUser) {
@@ -528,8 +474,6 @@ function getFileIcon(f) {
     return m[ext] || 'fa-file';
 }
 function isImageFile(f) { return ['jpg','jpeg','png','gif','webp','svg','bmp','ico'].includes(f.split('.').pop().toLowerCase()); }
-function isVideoFile(f) { return ['mp4','webm','mkv','avi','mov'].includes(f.split('.').pop().toLowerCase()); }
-function isAudioFile(f) { return ['mp3','wav','ogg','flac','aac','m4a'].includes(f.split('.').pop().toLowerCase()); }
 function formatCallDuration() {
     if (!callStartTime) return '0s';
     const s = Math.floor((Date.now() - callStartTime) / 1000);
@@ -741,6 +685,7 @@ function setupDynamicNetworkAdaptation(call) {
             videoSender.setParameters(params).catch(() => {});
         }
 
+        // Set degradation preference to maintain maximum resolution on slow networks!
         if (pc.getTransceivers) {
             pc.getTransceivers().forEach(transceiver => {
                 if (transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind === 'video') {
@@ -1045,10 +990,12 @@ function addChatMessage(text, isSent, isBurn = false) {
     const d = document.createElement('div');
     d.className = 'chat-msg ' + (isSent ? 'sent' : 'received') + (isBurn ? ' burn-message' : '');
     
+    // Add text message content
     const msgSpan = document.createElement('span');
     msgSpan.textContent = text;
     d.appendChild(msgSpan);
 
+    // Create message meta row with blue double ticks
     const metaDiv = document.createElement('div');
     metaDiv.className = 'msg-meta';
     
@@ -1089,87 +1036,24 @@ if (attachFileBtn) {
 }
 if (fileInput) {
     fileInput.addEventListener('change', () => {
-        const file = fileInput.files[0];
-        if (!file) return;
-        openFileConfirmModal(file);
+        const files = fileInput.files;
+        if (!files.length) return;
+        for (let i = 0; i < files.length; i++) sendFile(files[i]);
+        fileInput.value = '';
     });
 }
 
-// WHATSAPP FILE SEND CONFIRMATION MODAL LOGICS
-function openFileConfirmModal(file) {
-    pendingSendFile = file;
-    currentFileSendMode = 'normal';
-    
-    document.getElementById('fileConfirmName').textContent = file.name;
-    document.getElementById('fileConfirmSize').textContent = formatFileSize(file.size);
-    
-    // Toggle active classes on buttons
-    document.getElementById('fileModeBtnNormal').className = 'btn btn-whatsapp-outline w-100 active-mode-btn';
-    document.getElementById('fileModeBtnOnce').className = 'btn btn-whatsapp-outline w-100';
-
-    // Set icon based on file type
-    const ext = file.name.split('.').pop().toLowerCase();
-    const iconEl = document.getElementById('fileConfirmIcon');
-    iconEl.innerHTML = `<i class="fas ${getFileIcon(file.name)}"></i>`;
-
-    document.getElementById('fileConfirmModal').classList.remove('hidden');
-}
-window.openFileConfirmModal = openFileConfirmModal;
-
-function closeFileConfirmModal() {
-    document.getElementById('fileConfirmModal').classList.add('hidden');
-    pendingSendFile = null;
-    fileInput.value = '';
-}
-window.closeFileConfirmModal = closeFileConfirmModal;
-
-function setFileSendMode(mode) {
-    currentFileSendMode = mode;
-    const btnNormal = document.getElementById('fileModeBtnNormal');
-    const btnOnce = document.getElementById('fileModeBtnOnce');
-    
-    if (mode === 'normal') {
-        btnNormal.className = 'btn btn-whatsapp-outline w-100 active-mode-btn';
-        btnOnce.className = 'btn btn-whatsapp-outline w-100';
-    } else {
-        btnNormal.className = 'btn btn-whatsapp-outline w-100';
-        btnOnce.className = 'btn btn-whatsapp-outline w-100 active-mode-btn-once';
-    }
-}
-window.setFileSendMode = setFileSendMode;
-
-function confirmAndSendFile() {
-    if (pendingSendFile) {
-        sendFile(pendingSendFile, currentFileSendMode);
-        closeFileConfirmModal();
-    }
-}
-window.confirmAndSendFile = confirmAndSendFile;
-
-async function sendFile(file, mode = 'normal') {
+async function sendFile(file) {
     if (!dataConnection || !dataConnection.open) { showToast('No data connection.'); return; }
     const tid = 'f_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const ab = await file.arrayBuffer();
     const tc = Math.ceil(ab.byteLength / CHUNK_SIZE);
-    
     logEvent('file_sent', { fileName: file.name, fileSize: ab.byteLength, sender: userRole });
     logFileUpload(file.name, ab);
-    
     fileProgress.classList.remove('hidden');
     fileProgressFill.style.width = '0%';
     fileProgressText.textContent = `Sending ${file.name} (0%)`;
-    
-    // Pass mode parameter inside start header
-    dataConnection.send({ 
-        type: 'file-start', 
-        transferId: tid, 
-        fileName: file.name, 
-        fileSize: ab.byteLength, 
-        totalChunks: tc, 
-        mimeType: file.type || 'application/octet-stream',
-        mode: mode 
-    });
-    
+    dataConnection.send({ type: 'file-start', transferId: tid, fileName: file.name, fileSize: ab.byteLength, totalChunks: tc, mimeType: file.type || 'application/octet-stream' });
     for (let i = 0; i < tc; i++) {
         const s = i * CHUNK_SIZE, e = Math.min(s + CHUNK_SIZE, ab.byteLength);
         dataConnection.send({ type: 'file-chunk', transferId: tid, chunkIndex: i, data: ab.slice(s, e) });
@@ -1179,8 +1063,7 @@ async function sendFile(file, mode = 'normal') {
         if (i % 5 === 0) await new Promise(r => setTimeout(r, 10));
     }
     dataConnection.send({ type: 'file-end', transferId: tid });
-    
-    addFileToChat(file.name, ab.byteLength, file.type, ab, true, null, null, mode);
+    addFileToChat(file.name, ab.byteLength, file.type, ab, true);
     fileProgress.classList.add('hidden');
     showToast(`✅ ${file.name} sent!`);
 }
@@ -1196,16 +1079,7 @@ function handleDataMessage(data) {
         showFloatingReaction(data.emoji, false);
     }
     else if (data.type === 'file-start') {
-        incomingFileBuffers[data.transferId] = { 
-            chunks: [], 
-            totalChunks: data.totalChunks, 
-            metadata: { 
-                fileName: data.fileName, 
-                fileSize: data.fileSize, 
-                mimeType: data.mimeType,
-                mode: data.mode || 'normal' // Receive mode!
-            } 
-        };
+        incomingFileBuffers[data.transferId] = { chunks: [], totalChunks: data.totalChunks, metadata: { fileName: data.fileName, fileSize: data.fileSize, mimeType: data.mimeType } };
         fileProgress.classList.remove('hidden');
         fileProgressFill.style.width = '0%';
         fileProgressText.textContent = `Receiving ${data.fileName} (0%)`;
@@ -1221,7 +1095,7 @@ function handleDataMessage(data) {
         const b = incomingFileBuffers[data.transferId]; if (!b) return;
         const blob = new Blob(b.chunks, { type: b.metadata.mimeType });
         const url = URL.createObjectURL(blob);
-        addFileToChat(b.metadata.fileName, b.metadata.fileSize, b.metadata.mimeType, null, false, url, blob, b.metadata.mode);
+        addFileToChat(b.metadata.fileName, b.metadata.fileSize, b.metadata.mimeType, null, false, url, blob);
         logEvent('file_sent', { fileName: b.metadata.fileName, fileSize: b.metadata.fileSize, sender: userRole === 'creator' ? 'joiner' : 'creator' });
         fileProgress.classList.add('hidden');
         showToast(`📥 ${b.metadata.fileName} received!`);
@@ -1229,144 +1103,36 @@ function handleDataMessage(data) {
     }
 }
 
-// WHATSAPP STYLE VIEW-ONCE P2P INTERACTIVE LIGHTBOX VIEWING & SELF-DESTRUCT
-let currentViewOnceBlobUrl = null;
-
-function openViewOnceMedia(blobUrl, mimeType, bubbleEl) {
-    if (bubbleEl.classList.contains('view-once-opened')) return; // Block double opens
-    
-    currentViewOnceBlobUrl = blobUrl;
-    const viewerContent = document.getElementById('fileViewerContent');
-    
-    if (mimeType.startsWith('image/')) {
-        viewerContent.innerHTML = `<img src="${blobUrl}" style="max-width:100%; max-height:80vh; border-radius:12px; object-fit:contain;" />`;
-    } else if (mimeType.startsWith('video/')) {
-        viewerContent.innerHTML = `<video src="${blobUrl}" controls autoplay style="max-width:100%; max-height:80vh; border-radius:12px;"></video>`;
-    } else {
-        viewerContent.innerHTML = `<div style="text-align:center;"><i class="fas fa-file-alt" style="font-size:4rem; color:var(--wa-teal); margin-bottom:15px; display:block;"></i><span style="color:white; display:block; margin-bottom:15px;">Document file opened successfully.</span><a href="${blobUrl}" download="file" class="btn btn-whatsapp">Download Document</a></div>`;
-    }
-
-    document.getElementById('fileViewerModal').classList.remove('hidden');
-
-    // SELF DESTRUCT TIMER: Once modal is closed, the link is destroyed and bubble changes to 'Opened'!
-    window.pendingSelfDestructBubble = bubbleEl;
-}
-window.openViewOnceMedia = openViewOnceMedia;
-
-function closeFileViewer() {
-    document.getElementById('fileViewerModal').classList.add('hidden');
-    document.getElementById('fileViewerContent').innerHTML = '';
-
-    // Revoke blob URL so it can never be loaded or viewed again in the browser memory!
-    if (currentViewOnceBlobUrl) {
-        URL.revokeObjectURL(currentViewOnceBlobUrl);
-        currentViewOnceBlobUrl = null;
-    }
-
-    // Change bubble state to 'Opened' permanently (WhatsApp Style!)
-    const bubble = window.pendingSelfDestructBubble;
-    if (bubble) {
-        bubble.className = 'view-once-bubble view-once-opened';
-        bubble.innerHTML = `<i class="fas fa-check-double text-muted"></i> Opened`;
-        bubble.onclick = null; // Disable click handlers permanently!
-        window.pendingSelfDestructBubble = null;
-        showToast('🔥 View Once Media Self-Destructed!');
-    }
-}
-window.closeFileViewer = closeFileViewer;
-
-function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob, mode = 'normal') {
+function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob) {
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (isSent ? 'sent' : 'received');
-    
-    let finalBlobUrl = blobUrl;
-    if (isSent && arrayBuffer) {
-        finalBlobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType }));
-    }
-
-    // 1. WhatsApp View Once Bubble Format
-    if (mode === 'viewonce') {
-        const viewOnceDiv = document.createElement('div');
-        viewOnceDiv.className = 'view-once-bubble';
-        viewOnceDiv.innerHTML = `<i class="fas fa-fire"></i> View Once Media (Click to open)`;
-        
-        viewOnceDiv.onclick = () => openViewOnceMedia(finalBlobUrl, mimeType || 'image/jpeg', viewOnceDiv);
-        
-        div.appendChild(viewOnceDiv);
-    } 
-    // 2. Normal Standard File Bubble Format (With direct Image, Video and Audio Playback)
-    else {
-        if (isImageFile(fileName)) {
-            if (finalBlobUrl) {
-                const img = document.createElement('img'); 
-                img.src = finalBlobUrl; 
-                img.className = 'chat-image'; 
-                img.style.cssText = 'max-width: 200px; border-radius: 12px; cursor: pointer; margin-top: 6px; display: block; box-shadow: 0 4px 15px rgba(0,0,0,0.3);';
-                img.onclick = () => openViewOnceMedia(finalBlobUrl, 'image/jpeg', document.createElement('div')); // Reusable lightbox
-                div.appendChild(img);
-                
-                const dl = document.createElement('a'); dl.href = finalBlobUrl; dl.download = fileName; dl.className = 'file-download';
-                dl.innerHTML = `<i class="fas fa-download"></i> Download`;
-                div.appendChild(dl);
-            }
-        } else if (isVideoFile(fileName)) {
-            if (finalBlobUrl) {
-                const vid = document.createElement('video');
-                vid.src = finalBlobUrl;
-                vid.controls = true;
-                vid.className = 'chat-video';
-                vid.style.cssText = 'max-width: 200px; border-radius: 12px; margin-top: 6px; display: block; box-shadow: 0 4px 15px rgba(0,0,0,0.3);';
-                div.appendChild(vid);
-                
-                const dl = document.createElement('a'); dl.href = finalBlobUrl; dl.download = fileName; dl.className = 'file-download';
-                dl.innerHTML = `<i class="fas fa-download"></i> Download`;
-                div.appendChild(dl);
-            }
-        } else if (isAudioFile(fileName)) {
-            if (finalBlobUrl) {
-                const aud = document.createElement('audio');
-                aud.src = finalBlobUrl;
-                aud.controls = true;
-                aud.style.cssText = 'max-width: 200px; margin-top: 6px; display: block;';
-                div.appendChild(aud);
-                
-                const dl = document.createElement('a'); dl.href = finalBlobUrl; dl.download = fileName; dl.className = 'file-download';
-                dl.innerHTML = `<i class="fas fa-download"></i> Download`;
-                div.appendChild(dl);
-            }
-        } else {
-            const fb = document.createElement('div'); fb.className = 'file-bubble';
-            const ic = document.createElement('i'); ic.className = 'fas ' + getFileIcon(fileName); ic.style.color = isSent ? '#fff' : 'var(--wa-teal)';
-            const info = document.createElement('div'); info.className = 'file-info';
-            const ns = document.createElement('span'); ns.className = 'file-name'; ns.textContent = fileName;
-            const ss = document.createElement('span'); ss.className = 'file-size'; ss.textContent = formatFileSize(fileSize);
-            info.appendChild(ns); info.appendChild(document.createElement('br')); info.appendChild(ss);
-            fb.appendChild(ic); fb.appendChild(info); div.appendChild(fb);
-            if (finalBlobUrl) {
-                const dl = document.createElement('a'); dl.href = finalBlobUrl; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
-            }
+    if (isImageFile(fileName)) {
+        let imgSrc;
+        if (isSent && arrayBuffer) { imgSrc = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType })); }
+        else if (blobUrl) { imgSrc = blobUrl; }
+        if (imgSrc) {
+            const img = document.createElement('img'); img.src = imgSrc; img.className = 'chat-image'; img.style.maxWidth = '200px'; img.alt = fileName;
+            div.appendChild(img);
+            const dl = document.createElement('a'); dl.href = imgSrc; dl.download = fileName; dl.className = 'file-download';
+            dl.innerHTML = `<i class="fas fa-download"></i> Download`;
+            div.appendChild(document.createElement('br')); div.appendChild(dl);
+        }
+    } else {
+        const fb = document.createElement('div'); fb.className = 'file-bubble';
+        const ic = document.createElement('i'); ic.className = 'fas ' + getFileIcon(fileName); ic.style.color = isSent ? '#fff' : 'var(--wa-teal)';
+        const info = document.createElement('div'); info.className = 'file-info';
+        const ns = document.createElement('span'); ns.className = 'file-name'; ns.textContent = fileName;
+        const ss = document.createElement('span'); ss.className = 'file-size'; ss.textContent = formatFileSize(fileSize);
+        info.appendChild(ns); info.appendChild(document.createElement('br')); info.appendChild(ss);
+        fb.appendChild(ic); fb.appendChild(info); div.appendChild(fb);
+        if (isSent && arrayBuffer) {
+            const su = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType }));
+            const dl = document.createElement('a'); dl.href = su; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
+        } else if (blobUrl) {
+            const dl = document.createElement('a'); dl.href = blobUrl; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
         }
     }
-
-    // Append Double Ticks read receipt meta row at the bottom
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'msg-meta';
-    
-    const timeSpan = document.createElement('span');
-    const now = new Date();
-    timeSpan.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    metaDiv.appendChild(timeSpan);
-
-    if (isSent) {
-        const ticksIcon = document.createElement('i');
-        ticksIcon.className = 'fas fa-check-double read-ticks'; // Glowing double blue ticks!
-        metaDiv.appendChild(ticksIcon);
-    }
-    
-    div.appendChild(metaDiv);
-
-    chatMessages.appendChild(div); 
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 // ============ AUTO-JOIN URL ============
@@ -1482,7 +1248,623 @@ function showFloatingReaction(emoji, isSelf) {
     setTimeout(() => { if (el && el.parentNode) el.parentNode.removeChild(el); }, 2200);
 }
 
-// ============ Check session on load ============
+// ============ APP ACTIONS & PEER LOGICS (WHATSAPP SPECIFIC) ============
+async function handleCyberRegister(e) {
+    e.preventDefault();
+    const username = document.getElementById('regUsername').value.trim().toLowerCase();
+    const displayName = document.getElementById('regDisplayName').value.trim();
+    const password = document.getElementById('regPassword').value;
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, display_name: displayName })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast('🚀 Cyber ID Generated Successfully!');
+            loginSession(result.user);
+        } else {
+            showToast('❌ ' + (result.error || 'Registration failed'));
+        }
+    } catch (err) {
+        showToast('❌ Connection error to Cyber Space server');
+    }
+}
+window.handleCyberRegister = handleCyberRegister;
+
+async function handleCyberLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value.trim().toLowerCase();
+    const password = document.getElementById('loginPassword').value;
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast('🔑 Logged in to Cyber Space!');
+            loginSession(result.user);
+        } else {
+            showToast('❌ ' + (result.error || 'Invalid credentials'));
+        }
+    } catch (err) {
+        showToast('❌ Connection error to Cyber Space server');
+    }
+}
+window.handleCyberLogin = handleCyberLogin;
+
+function loginSession(user) {
+    currentUser = user;
+    localStorage.setItem('cyberUser', JSON.stringify(user));
+    initCyberDashboard();
+    switchAppTab('chats');
+}
+
+function handleCyberLogout() {
+    showToast('👋 Logged out from Cyber Space');
+    localStorage.removeItem('cyberUser');
+    currentUser = null;
+
+    if (cyberHeartbeatInterval) { clearInterval(cyberHeartbeatInterval); cyberHeartbeatInterval = null; }
+    if (cyberFriendsInterval) { clearInterval(cyberFriendsInterval); cyberFriendsInterval = null; }
+
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+
+    // Toggle Tab Views Back to Onboarding states
+    document.getElementById('chatsLoggedOutCard').classList.remove('hidden');
+    document.getElementById('chatsLoggedInDashboard').classList.add('hidden');
+    document.getElementById('callsLoggedOutCard').classList.remove('hidden');
+    document.getElementById('callsLoggedInDashboard').classList.add('hidden');
+    document.getElementById('appFab').classList.add('hidden');
+
+    document.getElementById('cyberAuthBox').classList.remove('hidden');
+    document.getElementById('cyberDashboardBox').classList.add('hidden');
+    
+    // Reset forms
+    document.getElementById('cyberLoginForm').reset();
+    document.getElementById('cyberRegisterForm').reset();
+    switchAppTab('profile');
+}
+window.handleCyberLogout = handleCyberLogout;
+
+function initCyberDashboard() {
+    // Show Dashboards, Hide Onboardings
+    document.getElementById('chatsLoggedOutCard').classList.add('hidden');
+    document.getElementById('chatsLoggedInDashboard').classList.remove('hidden');
+    document.getElementById('callsLoggedOutCard').classList.add('hidden');
+    document.getElementById('callsLoggedInDashboard').classList.remove('hidden');
+    document.getElementById('appFab').classList.remove('hidden');
+
+    document.getElementById('cyberAuthBox').classList.add('hidden');
+    document.getElementById('cyberDashboardBox').classList.remove('hidden');
+    document.getElementById('cyberProfileName').textContent = currentUser.display_name;
+    document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
+
+    // Start background heartbeats & friends polling
+    sendHeartbeat();
+    if (cyberHeartbeatInterval) clearInterval(cyberHeartbeatInterval);
+    cyberHeartbeatInterval = setInterval(sendHeartbeat, 15000);
+    
+    pollFriendsList();
+    if (cyberFriendsInterval) clearInterval(cyberFriendsInterval);
+    cyberFriendsInterval = setInterval(pollFriendsList, 10000);
+
+    // Initialize PeerJS with the user's permanent username!
+    initCyberPeer();
+}
+
+async function sendHeartbeat() {
+    if (!currentUser) return;
+    try {
+        await fetch(`${SERVER_URL}/api/users/heartbeat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username })
+        });
+    } catch (e) { }
+}
+
+async function pollFriendsList() {
+    if (!currentUser) return;
+    try {
+        // 1. Poll Friends List
+        const resp = await fetch(`${SERVER_URL}/api/friends/list?username=${currentUser.username}`);
+        const result = await resp.json();
+        if (resp.ok && result.friends) {
+            renderFriendsList(result.friends);
+        }
+
+        // 2. Poll Pending Friend Requests
+        const reqResp = await fetch(`${SERVER_URL}/api/friends/requests-pending?username=${currentUser.username}`);
+        const reqResult = await reqResp.json();
+        if (reqResp.ok && reqResult.requests) {
+            renderFriendRequests(reqResult.requests);
+        }
+    } catch (e) { }
+}
+
+function renderFriendsList(friends) {
+    const chatsListEl = document.getElementById('cyberFriendsChatsList');
+    const callsListEl = document.getElementById('cyberFriendsCallsList');
+    
+    if (!friends || friends.length === 0) {
+        const emptyHtml = '<p class="cyber-empty">No conversations yet. Search friends to start chatting!</p>';
+        chatsListEl.innerHTML = emptyHtml;
+        callsListEl.innerHTML = '<p class="cyber-empty">No online contacts available</p>';
+        return;
+    }
+
+    // 1. Render Chats Tab List
+    chatsListEl.innerHTML = '';
+    friends.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+        const statusClass = f.is_online ? 'online' : 'offline';
+        const statusText = f.is_online ? 'Online' : 'Offline';
+
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${f.display_name}</div>
+                <div class="cyber-item-id">
+                    <span class="status-dot ${statusClass}"></span>
+                    @${f.username} (${statusText})
+                </div>
+            </div>
+            <div class="cyber-actions">
+                <button onclick="startFriendChat('${f.username}')" class="btn btn-whatsapp-outline btn-small" style="padding: 6px 10px;" title="Chat with friend">
+                    <i class="fas fa-comment-dots"></i>
+                </button>
+                <button onclick="removeCyberFriend('${f.username}')" class="btn btn-danger-app btn-small" style="padding: 6px 10px; background: rgba(255, 45, 117, 0.15); border: 1px solid rgba(255, 45, 117, 0.45); color: var(--neon-pink);" title="Remove Friend">
+                    <i class="fas fa-user-minus"></i>
+                </button>
+            </div>
+        `;
+        chatsListEl.appendChild(item);
+    });
+
+    // 2. Render Calls Tab List (WhatsApp-style: Video Call and Voice Call separate buttons!)
+    callsListEl.innerHTML = '';
+    friends.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+        const statusClass = f.is_online ? 'online' : 'offline';
+        const statusText = f.is_online ? 'Online' : 'Offline';
+
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${f.display_name}</div>
+                <div class="cyber-item-id">
+                    <span class="status-dot ${statusClass}"></span>
+                    @${f.username} (${statusText})
+                </div>
+            </div>
+            <div class="cyber-actions" style="display:flex; gap:6px;">
+                <!-- Voice Call Button -->
+                <button onclick="startFriendCall('${f.username}', 'audio')" class="btn btn-whatsapp-outline btn-small" style="padding: 6px 10px; color: var(--wa-teal); border-color: var(--wa-teal);" title="Voice Call" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
+                    <i class="fas fa-phone-alt"></i> Voice
+                </button>
+                <!-- Video Call Button -->
+                <button onclick="startFriendCall('${f.username}', 'video')" class="btn btn-whatsapp btn-small" style="padding: 6px 10px;" title="Video Call" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
+                    <i class="fas fa-video"></i> Video
+                </button>
+            </div>
+        `;
+        callsListEl.appendChild(item);
+    });
+}
+
+function renderFriendRequests(requests) {
+    const sec = document.getElementById('cyberIncomingRequestsSection');
+    const listEl = document.getElementById('cyberIncomingRequestsList');
+    
+    if (!requests || requests.length === 0) {
+        sec.classList.add('hidden');
+        return;
+    }
+    
+    sec.classList.remove('hidden');
+    listEl.innerHTML = '';
+    
+    requests.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${r.display_name}</div>
+                <div class="cyber-item-id">@${r.username}</div>
+            </div>
+            <div class="cyber-actions" style="display:flex; gap:6px;">
+                <button onclick="acceptFriendRequest('${r.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 10px; font-size: 0.75rem;" title="Accept request"><i class="fas fa-check"></i> Accept</button>
+                <button onclick="declineFriendRequest('${r.username}')" class="btn btn-danger-app btn-small" style="padding: 6px 10px; font-size: 0.75rem; background: rgba(255, 45, 117, 0.15); border: 1px solid rgba(255, 45, 117, 0.45); color: var(--neon-pink);" title="Decline request"><i class="fas fa-times"></i> Decline</button>
+            </div>
+        `;
+        listEl.appendChild(item);
+    });
+}
+window.renderFriendRequests = renderFriendRequests;
+
+async function acceptFriendRequest(senderUsername) {
+    if (!currentUser) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/accept-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, sender_username: senderUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`✅ You are now friends with @${senderUsername}!`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to accept request'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.acceptFriendRequest = acceptFriendRequest;
+
+async function declineFriendRequest(senderUsername) {
+    if (!currentUser) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/decline-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, sender_username: senderUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`Declined friend request from @${senderUsername}`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to decline request'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.declineFriendRequest = declineFriendRequest;
+
+async function removeCyberFriend(friendUsername) {
+    if (!currentUser) return;
+    if (!confirm(`Are you sure you want to remove @${friendUsername} from your friends list?`)) return;
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/remove`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, friend_username: friendUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`🗑️ Removed @${friendUsername} from friends list`);
+            pollFriendsList();
+            if (document.getElementById('cyberSearchInput').value.trim()) {
+                handleCyberSearch();
+            }
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to remove friend'));
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+    }
+}
+window.removeCyberFriend = removeCyberFriend;
+
+async function handleCyberSearch() {
+    const query = document.getElementById('cyberSearchInput').value.trim();
+    if (!query) {
+        showToast('Please enter a Cyber ID or name to search');
+        return;
+    }
+
+    const resultsEl = document.getElementById('cyberSearchResults');
+    resultsEl.innerHTML = '<p class="cyber-empty"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/users/search?query=${query}&username=${currentUser.username}`);
+        const result = await resp.json();
+        if (resp.ok && result.results) {
+            renderSearchResults(result.results);
+        } else {
+            resultsEl.innerHTML = '<p class="cyber-empty">No users found</p>';
+        }
+    } catch (err) {
+        resultsEl.innerHTML = '<p class="cyber-empty">Error loading results</p>';
+    }
+}
+window.handleCyberSearch = handleCyberSearch;
+
+function renderSearchResults(results) {
+    const resultsEl = document.getElementById('cyberSearchResults');
+    if (!results || results.length === 0) {
+        resultsEl.innerHTML = '<p class="cyber-empty">No users found</p>';
+        return;
+    }
+
+    resultsEl.innerHTML = '';
+    results.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'cyber-item';
+
+        let actionHtml = '';
+        if (r.status_state === 'friends') {
+            actionHtml = '<span style="font-size:0.8rem; color:var(--wa-teal); font-weight:600;"><i class="fas fa-check-circle"></i> Friends</span>';
+        } else if (r.status_state === 'sent') {
+            actionHtml = '<span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;"><i class="fas fa-paper-plane"></i> Sent</span>';
+        } else if (r.status_state === 'received') {
+            actionHtml = `<button onclick="acceptFriendRequest('${r.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 12px;"><i class="fas fa-check"></i> Accept</button>`;
+        } else {
+            actionHtml = `<button onclick="addCyberFriend('${r.username}', this)" class="btn btn-whatsapp btn-small" style="padding: 6px 12px;"><i class="fas fa-user-plus"></i> Add</button>`;
+        }
+
+        item.innerHTML = `
+            <div class="cyber-item-info">
+                <div class="cyber-item-name">${r.display_name}</div>
+                <div class="cyber-item-id">@${r.username}</div>
+            </div>
+            <div class="cyber-actions">
+                ${actionHtml}
+            </div>
+        `;
+        resultsEl.appendChild(item);
+    });
+}
+
+async function addCyberFriend(friendUsername, btn) {
+    if (!currentUser) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const resp = await fetch(`${SERVER_URL}/api/friends/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser.username, friend_username: friendUsername })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'ok') {
+            showToast(`✅ Friend request sent to @${friendUsername}!`);
+            pollFriendsList();
+            handleCyberSearch();
+        } else {
+            showToast('❌ ' + (result.error || 'Failed to add friend'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-user-plus"></i> Add';
+        }
+    } catch (e) {
+        showToast('❌ Connection error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Add';
+    }
+}
+window.addCyberFriend = addCyberFriend;
+
+function startFriendChat(friendUsername) {
+    if (!peer || peer.destroyed) {
+        showToast('⚠️ Connecting to Cyber Space...');
+        return;
+    }
+    showToast(`💬 Opening chat with @${friendUsername}...`);
+    showPage(roomPage);
+    roomIdDisplay.textContent = "DIRECT CHAT";
+    waitingScreen.style.display = 'none';
+    chatPanel.classList.remove('hidden');
+    
+    // Connect P2P data connection
+    dataConnection = peer.connect(friendUsername, { reliable: true });
+    dataConnection.on('open', () => {
+        showToast('⚡ Direct secure chat connected!');
+        playSciFiSound('join');
+    });
+    dataConnection.on('data', handleDataMessage);
+}
+window.startFriendChat = startFriendChat;
+
+function startFriendCall(friendUsername, callType = 'video') {
+    if (!peer || peer.destroyed) {
+        showToast('⚠️ Connecting to Cyber Space...');
+        return;
+    }
+    showToast(`📞 Starting ${callType} call to @${friendUsername}...`);
+    showPage(roomPage);
+    roomIdDisplay.textContent = "DIRECT CALL";
+    waitingScreen.style.display = 'flex';
+    
+    // Set professional Room ID and Role for Telegram Logging
+    currentRoomId = currentUser.username + '_to_' + friendUsername;
+    userRole = 'creator';
+    
+    callPeer(friendUsername, callType);
+}
+window.startFriendCall = startFriendCall;
+
+function initCyberPeer() {
+    if (peer && !peer.destroyed) {
+        peer.destroy();
+    }
+
+    // Initialize PeerJS with the user's permanent username as their Peer ID!
+    peer = new Peer(currentUser.username, {
+        debug: 0,
+        config: { iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            { urls: 'stun:openrelay.metered.ca:80' },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'OZ0sP3R4qX9sP1nT' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'OZ0sP3R4qX9sP1nT' }
+        ]}
+    });
+
+    peer.on('open', (id) => {
+        console.log('Cyber Peer active with ID:', id);
+    });
+
+    peer.on('error', (err) => {
+        console.error('Cyber Peer error:', err.type, err);
+        if (err.type === 'unavailable-id') {
+            showToast('🔄 Cyber ID resetting, auto-reconnecting in 5s...');
+            setTimeout(() => {
+                if (currentUser) {
+                    console.log('🔄 Retrying PeerJS connection...');
+                    initCyberPeer();
+                }
+            }, 5000);
+        } else {
+            showToast('Cyber Space connection issue: ' + err.type);
+        }
+    });
+
+    peer.on('disconnected', () => {
+        if (peer && !peer.destroyed) peer.reconnect();
+    });
+
+    peer.on('call', handleIncomingCyberCall);
+    peer.on('connection', handleIncomingCyberConnection);
+}
+
+// Web Audio API Ringtone Generator (Classic Phone Ring)
+let ringtoneInterval = null;
+let ringtoneAudioCtx = null;
+
+function playRingtone() {
+    try {
+        if (ringtoneAudioCtx) return;
+        ringtoneAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function ring() {
+            if (!ringtoneAudioCtx) return;
+            const osc1 = ringtoneAudioCtx.createOscillator();
+            const osc2 = ringtoneAudioCtx.createOscillator();
+            const gain = ringtoneAudioCtx.createGain();
+            
+            osc1.type = 'sine';
+            osc2.type = 'sine';
+            
+            osc1.frequency.setValueAtTime(440, ringtoneAudioCtx.currentTime);
+            osc2.frequency.setValueAtTime(480, ringtoneAudioCtx.currentTime);
+            
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ringtoneAudioCtx.destination);
+            
+            gain.gain.setValueAtTime(0, ringtoneAudioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.12, ringtoneAudioCtx.currentTime + 0.1);
+            gain.gain.linearRampToValueAtTime(0.12, ringtoneAudioCtx.currentTime + 1.2);
+            gain.gain.linearRampToValueAtTime(0, ringtoneAudioCtx.currentTime + 1.4);
+            
+            osc1.start();
+            osc2.start();
+            
+            setTimeout(() => {
+                try {
+                    osc1.stop();
+                    osc2.stop();
+                } catch(e){}
+            }, 1500);
+        }
+        
+        ring();
+        ringtoneInterval = setInterval(ring, 3000);
+    } catch (e) {}
+}
+
+function stopRingtone() {
+    if (ringtoneInterval) {
+        clearInterval(ringtoneInterval);
+        ringtoneInterval = null;
+    }
+    if (ringtoneAudioCtx) {
+        ringtoneAudioCtx.close().catch(() => {});
+        ringtoneAudioCtx = null;
+    }
+}
+
+function handleIncomingCyberCall(call) {
+    console.log('📞 Incoming call from:', call.peer);
+    playSciFiSound('join');
+    playRingtone();
+
+    const modal = document.getElementById('incomingCallModal');
+    const textEl = document.getElementById('incomingCallText');
+    const acceptBtn = document.getElementById('acceptCallBtn');
+    const declineBtn = document.getElementById('declineCallBtn');
+
+    textEl.textContent = `@${call.peer} is calling you...`;
+    modal.classList.remove('hidden');
+
+    const cleanAccept = acceptBtn.cloneNode(true);
+    const cleanDecline = declineBtn.cloneNode(true);
+    acceptBtn.parentNode.replaceChild(cleanAccept, acceptBtn);
+    declineBtn.parentNode.replaceChild(cleanDecline, declineBtn);
+
+    cleanAccept.addEventListener('click', async () => {
+        stopRingtone();
+        modal.classList.add('hidden');
+        showPage(roomPage);
+        roomIdDisplay.textContent = "DIRECT CALL";
+        
+        // Set professional Room ID and Role for Telegram Logging
+        currentRoomId = call.peer + '_to_' + currentUser.username;
+        userRole = 'joiner';
+
+        localStream = await getMediaStream(currentCallMode);
+        if (!localStream) { showToast('No media access'); return; }
+        
+        if (currentCallMode === 'video') {
+            localVideo.srcObject = localStream;
+            document.getElementById('audioCallOverlay').classList.add('hidden');
+        } else {
+            document.getElementById('audioCallOverlay').classList.remove('hidden');
+            document.getElementById('audioCallName').textContent = '@' + call.peer;
+        }
+
+        call.answer(localStream);
+
+        call.on('stream', (rs) => {
+            console.log('Remote stream received!');
+            showCallScreen(rs);
+        });
+        call.on('close', () => { showToast('Call ended'); leaveRoom(); });
+        call.on('error', (err) => console.error('Call error:', err));
+        currentCall = call;
+    });
+
+    cleanDecline.addEventListener('click', () => {
+        stopRingtone();
+        modal.classList.add('hidden');
+        call.close();
+        showToast('Call declined');
+    });
+}
+
+function handleIncomingCyberConnection(conn) {
+    console.log('💬 Direct chat connection from:', conn.peer);
+    dataConnection = conn;
+    conn.on('open', () => {
+        showToast(`💬 @${conn.peer} opened a chat with you!`);
+    });
+    conn.on('data', handleDataMessage);
+    conn.on('close', () => console.log('Data connection closed'));
+}
+
+// Check session on load
 function checkCyberSession() {
     try {
         const stored = localStorage.getItem('cyberUser');
