@@ -25,25 +25,15 @@ body {
     background: #090e11; /* Desktop dark background around phone frame */
     color: var(--text-primary);
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow-x: hidden;
-}
-
-/* ============ SMARTPHONE FRAME MOCKUP (DESKTOP) ============ */
-.phone-container {
-    width: 100vw;
-    height: 100vh;
-    background: var(--wa-bg-deep);
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
 }
 
 /* On Desktop/Laptop: Form it into a gorgeousCentered Vertical Smartphone interface! */
 @media (min-width: 769px) {
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .phone-container {
         width: 440px;
         height: 92vh;
@@ -534,44 +524,6 @@ body {
     color: var(--text-secondary);
 }
 
-/* Backward compatibility anonymous card */
-.anonymous-card {
-    margin-top: 24px;
-    background: rgba(255,255,255,0.02);
-    border: 1px dashed var(--wa-border);
-    border-radius: var(--radius);
-    padding: 18px;
-}
-.anonymous-card h4 {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.85rem;
-    color: var(--wa-teal);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.anonymous-card p {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    margin-top: 4px;
-}
-.join-group {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-}
-.join-group input {
-    flex: 1;
-    background: var(--wa-input-bg);
-    border: 1px solid var(--wa-border);
-    border-radius: var(--radius-sm);
-    padding: 0 14px;
-    color: white;
-    font-size: 0.85rem;
-    outline: none;
-}
-.join-group input:focus { border-color: var(--wa-teal); }
-
 /* ============ NATIVE BOTTOM SHEET SEARCH MODAL ============ */
 .native-modal {
     position: absolute;
@@ -916,375 +868,407 @@ body {
 }
 .floating-emoji-bar button:hover { transform: scale(1.3) translateY(-2px); }
 
-/* ============ CHAT SLIDING BOTTOM SHEET DRAWER (NATIVE SMARTPHONE APP FEEL!) ============ */
-.chat-bottom-sheet {
+/* ============ WHATSAPP VOICE CALL SCREEN OVERLAY ============ */
+.audio-call-overlay {
     position: absolute;
-    bottom: 0; left: 0;
-    width: 100%;
-    height: 72vh; /* Takes exactly 72% height of phone */
-    background: var(--wa-bg-deep);
-    border-top: 2px solid var(--wa-border);
-    border-top-left-radius: 28px;
-    border-top-right-radius: 28px;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #0b141a;
     display: flex;
     flex-direction: column;
-    z-index: 1000;
-    box-shadow: 0 -15px 40px rgba(0,0,0,0.85);
-    backdrop-filter: blur(20px);
-    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.chat-bottom-sheet.hidden {
-    transform: translateY(100%);
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 4;
 }
 
-.sheet-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--wa-border);
-}
-.sheet-header h3 {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.9rem;
+.audio-avatar-pulse {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: rgba(0, 168, 132, 0.15);
+    border: 2px solid var(--wa-teal);
     color: var(--wa-teal);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.chat-messages-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.chat-msg {
-    max-width: 80%;
-    padding: 10px 14px;
-    border-radius: 16px;
-    font-size: 0.9rem;
-    line-height: 1.45;
-    word-break: break-word;
-}
-.chat-msg.sent {
-    align-self: flex-end;
-    background: var(--wa-teal-dark);
-    color: white;
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
-.chat-msg.received {
-    align-self: flex-start;
-    background: var(--wa-bg-secondary);
-    color: var(--text-primary);
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--wa-border);
-}
-
-.chat-system {
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    padding: 8px;
-}
-
-.chat-file-progress {
-    padding: 10px 20px;
-    border-top: 1px solid var(--wa-border);
-}
-.chat-file-progress .bar-fill {
-    height: 4px;
-    background: linear-gradient(90deg, var(--wa-teal), var(--neon-cyan));
-    width: 0%;
-    transition: width 0.2s;
-    border-radius: 2px;
-}
-.chat-file-progress span {
-    font-size: 0.72rem;
-    color: var(--wa-teal);
-    display: block;
-    text-align: center;
-    margin-top: 4px;
-}
-
-.sheet-input-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    border-top: 1px solid var(--wa-border);
-}
-.sheet-icon-btn {
-    background: none;
-    border: none;
-    font-size: 1.1rem;
-    cursor: pointer;
-    width: 36px;
-    height: 36px;
+    font-size: 2.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: audioPulse 2s infinite;
 }
-.text-green { color: var(--neon-green); }
-.text-pink { color: var(--neon-pink); }
-.text-teal { color: var(--wa-teal); }
 
-.sheet-input-group input[type="text"] {
-    flex: 1;
-    background: var(--wa-input-bg);
-    border: 1px solid var(--wa-border);
-    border-radius: 24px;
-    padding: 10px 16px;
+@keyframes audioPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.4); }
+    70% { box-shadow: 0 0 0 25px rgba(0, 168, 132, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 168, 132, 0); }
+}
+
+.audio-call-overlay h4 {
+    font-family: 'Orbitron', sans-serif;
     color: white;
-    font-size: 0.88rem;
-    outline: none;
+    font-size: 1.25rem;
 }
-.sheet-input-group input[type="text"]:focus { border-color: var(--wa-teal); }
+.audio-call-overlay p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
 
-/* ============ INCOMING RING OVERLAY ============ */
+/* ============ MSG META WITH BLUE DOUBLE TICKS ============ */
+.msg-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-align: right;
+}
+.msg-meta span {
+    color: rgba(255,255,255,0.6);
+}
+.read-ticks {
+    color: #00f0ff; /* Glowing cyan ticks! */
+    font-size: 0.72rem;
+    text-shadow: 0 0 5px #00f0ff;
+}
+
+/* ============ RESPONSIVE & MOBILE DRAWERS ============ */
+@media (max-width: 768px) {
+    body {
+        display: block !important;
+        background: var(--wa-bg-deep) !important;
+    }
+    .phone-container {
+        width: 100vw !important;
+        height: 100vh !important;
+        border-radius: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    .navbar { padding: 12px 14px; flex-direction: column; gap: 6px; }
+    .nav-right { gap: 8px; }
+    .hero { padding: 18px 12px 12px; }
+    .hero-title { font-size: 2rem; }
+    .join-input-group { flex-direction: column; }
+    .features { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 0 12px; }
+    .feature-card { padding: 16px 12px; }
+    
+    /* 100% Full-Screen Video call ratio on phone (Exactly like WhatsApp!) */
+    .call-screen-view {
+        position: relative;
+        height: 100vh;
+        width: 100vw;
+    }
+    
+    .video-grid-stage {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1;
+    }
+    
+    .main-video {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0; /* Pure full screen, no border */
+        border: none;
+        box-shadow: none;
+    }
+    
+    .self-video { 
+        width: 80px; 
+        height: 140px; 
+        top: 76px; /* Below floating header */
+        right: 16px; 
+        border-radius: 14px;
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+        z-index: 5;
+    }
+    
+    /* Floating transparent header over video call */
+    .room-header-bar {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        background: linear-gradient(180deg, rgba(11,20,26,0.92) 0%, transparent 100%);
+        border-bottom: none;
+        z-index: 10;
+        backdrop-filter: none;
+    }
+    
+    /* Transparent frosty bottom-sheet chat (Chat while Call feature!) */
+    .chat-bottom-sheet { 
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100vw; 
+        height: 52vh; /* Takes exactly 52% of phone screen from bottom */
+        border-left: none;
+        border-top: 2px solid rgba(255, 255, 255, 0.1);
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
+        background: rgba(11, 19, 24, 0.72); /* Beautiful translucent glassmorphic look */
+        backdrop-filter: blur(16px); /* Frosty blur underneath */
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: 0 -15px 35px rgba(0, 0, 0, 0.65);
+        transform: translateY(100%);
+        z-index: 999;
+    }
+    
+    /* Transparent semi-glowing message bubbles for in-call chatting */
+    .chat-msg.sent {
+        background: rgba(0, 92, 75, 0.75) !important;
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .chat-msg.received {
+        background: rgba(32, 44, 51, 0.6) !important;
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(255,255,255,0.05) !important;
+    }
+    
+    .chat-bottom-sheet.hidden {
+        transform: translateY(100%);
+    }
+    
+    .floating-controls { 
+        position: absolute;
+        bottom: 24px; 
+        background: rgba(11, 20, 26, 0.88);
+        border-top: 1px solid var(--wa-border);
+        box-shadow: 0 -10px 25px rgba(0,0,0,0.5);
+        z-index: 20;
+    }
+    .ctrl-btn { width: 42px; height: 42px; font-size: 0.95rem; }
+    .ctrl-btn-danger { width: 50px; height: 52px; }
+    
+    .room-header { flex-direction: column; gap: 6px; padding: 8px 12px; }
+    .room-actions-top { flex-wrap: wrap; justify-content: center; gap: 8px; }
+    
+    .waiting-features { gap: 8px; }
+    .wf-item { font-size: 0.72rem; padding: 4px 8px; }
+    .recording-indicator { top: 8px; right: 8px; padding: 5px 10px; font-size: 0.62rem; }
+    
+    .cyber-id-section {
+        max-width: 480px;
+        margin: 0 auto 40px;
+        padding: 0 16px;
+    }
+    .cyber-box {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 400px) {
+    .features { grid-template-columns: 1fr; }
+    .hero-title { font-size: 1.8rem; }
+}
+
+/* ============ SUPER ADVANCED FUTURISTIC STYLES ============ */
+.active-speaker {
+    box-shadow: 0 0 30px var(--wa-teal), inset 0 0 12px var(--wa-teal) !important;
+    border: 2px solid var(--wa-teal) !important;
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.floating-emoji {
+    position: fixed;
+    bottom: 120px;
+    font-size: 2.8rem;
+    pointer-events: none;
+    z-index: 999999;
+    animation: floatUpEmoji 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    filter: drop-shadow(0 0 15px rgba(255,255,255,0.7));
+}
+
+@keyframes floatUpEmoji {
+    0% { opacity: 1; transform: translateY(0) scale(0.6); }
+    50% { opacity: 1; transform: translateY(-220px) scale(1.3); }
+    100% { opacity: 0; transform: translateY(-450px) scale(0.8); }
+}
+
+.burn-message {
+    border-left: 3px solid #ff2d75 !important;
+    background: linear-gradient(90deg, rgba(255,45,117,0.15), transparent) !important;
+    animation: pulseBurn 1s infinite alternate;
+}
+
+@keyframes pulseBurn {
+    0% { box-shadow: 0 0 5px rgba(255,45,117,0.2); }
+    100% { box-shadow: 0 0 18px rgba(255,45,117,0.5); }
+}
+
+.burn-badge {
+    color: #ff2d75;
+    font-weight: 800;
+    font-size: 0.75rem;
+    font-family: 'Orbitron', monospace;
+    margin-right: 6px;
+}
+
+/* ============ WHATSAPP STYLE INCOMING CALL SCREEN OVERLAY ============ */
 .incoming-ring-overlay {
     position: absolute;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    background: rgba(11, 20, 26, 0.96);
+    background: rgba(11, 20, 26, 0.98);
     z-index: 10000;
     display: flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
 }
 
-.ring-box {
-    background: var(--wa-bg-primary);
-    border: 2px solid var(--wa-teal);
-    border-radius: 30px;
-    padding: 40px 24px;
-    width: 85%;
-    max-width: 340px;
-    text-align: center;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(0, 168, 132, 0.25);
+.ring-container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 18px;
-}
-
-.ring-avatar-pulse {
-    width: 76px;
-    height: 76px;
-    border-radius: 50%;
-    background: rgba(0, 168, 132, 0.1);
-    border: 2px solid var(--wa-teal);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--wa-teal);
-    font-size: 2rem;
-    animation: ringPulse 1.5s infinite;
-}
-
-@keyframes ringPulse {
-    0% { box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.4); }
-    70% { box-shadow: 0 0 0 15px rgba(0, 168, 132, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(0, 168, 132, 0); }
-}
-
-.ring-title {
-    font-family: 'Orbitron', sans-serif;
-    color: white;
-    font-size: 1.35rem;
-}
-.ring-subtitle {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-.ring-actions-row {
-    display: flex;
-    gap: 30px;
-    width: 100%;
-    justify-content: center;
-    margin-top: 10px;
-}
-
-.ring-btn {
-    width: 58px;
-    height: 58px;
-    border-radius: 50%;
-    border: none;
-    font-size: 1.35rem;
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s;
-}
-.ring-btn:hover { transform: scale(1.1); }
-.ring-btn-decline {
-    background: var(--neon-pink);
-    box-shadow: 0 5px 20px rgba(255,45,117,0.4);
-}
-.ring-btn-accept {
-    background: var(--wa-teal);
-    box-shadow: 0 5px 20px rgba(0,168,132,0.4);
-}
-
-/* ============ COLLABORATIVE WHITEBOARD MODAL ============ */
-.whiteboard-modal-overlay {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(5,5,16,0.94);
-    z-index: 5000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(8px);
-}
-.whiteboard-box {
-    background: var(--wa-bg-primary);
-    border: 1px solid var(--wa-teal);
-    border-radius: 24px;
-    padding: 20px;
-    width: 90%;
-    max-width: 380px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.8);
-}
-.whiteboard-header {
-    display: flex;
     justify-content: space-between;
-    align-items: center;
-}
-.whiteboard-header h3 {
-    font-family: 'Orbitron', sans-serif;
-    color: var(--wa-teal);
-    font-size: 0.95rem;
-}
-#whiteboardCanvas {
-    background: #04040c;
-    border: 1px solid var(--wa-border);
-    border-radius: 12px;
-    cursor: crosshair;
+    height: 100%;
     width: 100%;
-    height: 220px;
+    max-width: 360px;
 }
-.whiteboard-controls {
+
+.ring-top-secure {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.ring-top-secure i {
+    font-size: 0.7rem;
+}
+
+.ring-caller-details {
+    text-align: center;
+    margin-top: 20px;
+}
+.ring-caller-name {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    text-shadow: 0 0 10px rgba(0, 168, 132, 0.3);
+}
+.ring-call-type {
+    font-size: 0.9rem;
+    color: var(--wa-teal);
+    font-weight: 700;
+    margin-top: 6px;
+    display: block;
+    letter-spacing: 0.5px;
+}
+
+/* Pulsing Avatar Group */
+.ring-avatar-container {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 40px 0;
+}
+
+.ring-avatar-icon {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--wa-teal), var(--neon-cyan));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2.8rem;
+    z-index: 10;
+    box-shadow: 0 8px 25px rgba(0, 168, 132, 0.4);
+}
+
+.ring-avatar-ring, .ring-avatar-ring-2 {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 2px solid var(--wa-teal);
+    z-index: 1;
+    animation: ringPulseOut 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+.ring-avatar-ring-2 {
+    animation-delay: 1s;
+    border-color: var(--neon-cyan);
+}
+
+@keyframes ringPulseOut {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Actions Row at the bottom */
+.ring-actions-container {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    max-width: 280px;
+}
+
+.ring-btn-wrap {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-}
-.wb-color-row {
-    display: flex;
-    gap: 6px;
     align-items: center;
+    gap: 8px;
 }
-.wb-color-row button {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-}
-.eraser-btn {
-    background: #333 !important;
-    border-radius: 6px !important;
-    color: white;
-    font-size: 0.72rem;
-    padding: 3px 8px;
-    cursor: pointer;
+.ring-btn-wrap span {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
     font-weight: 700;
 }
 
-/* ============ OTHER INDICATORS & GENERAL ============ */
-.toast {
-    position: absolute;
-    bottom: 90px; left: 50%;
-    transform: translateX(-50%) translateY(100px);
-    padding: 10px 20px;
-    background: rgba(32, 44, 51, 0.95);
-    border: 1px solid var(--wa-teal);
-    border-radius: var(--radius-sm);
-    color: white;
-    font-weight: 500; font-size: 0.85rem;
-    z-index: 10000;
-    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-    pointer-events: none;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-    text-align: center;
-    width: 80%;
-}
-.toast.show { transform: translateX(-50%) translateY(0); }
-
-.recording-indicator {
-    position: absolute;
-    top: 12px; right: 12px;
-    z-index: 9999;
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px;
-    background: rgba(10,5,5,0.9);
-    border: 1px solid var(--neon-pink);
-    border-radius: 20px;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.65rem; font-weight: 700;
-    color: var(--neon-pink);
-}
-
-.rec-dot {
-    width: 8px; height: 8px;
+.ring-action-btn {
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: var(--neon-pink);
-    box-shadow: 0 0 8px var(--neon-pink);
-    animation: recBlink 1s infinite alternate;
-}
-@keyframes recBlink { to { opacity: 0.2; } }
-
-.hidden { display: none !important; }
-
-/* ============ TERMS & CONDITIONS FULL OVERLAY ============ */
-.tc-modal {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(11,20,26,0.98);
-    z-index: 100000;
+    border: none;
+    font-size: 1.4rem;
+    color: white;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    transition: all 0.25s ease;
 }
-.tc-box {
-    background: var(--wa-bg-primary);
-    border: 1px solid var(--wa-border);
-    border-radius: var(--radius);
-    width: 100%;
-    height: 90%;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.8);
-    overflow: hidden;
+.ring-action-btn:hover {
+    transform: scale(1.12);
 }
-.tc-box h2 {
-    padding: 16px 20px;
-    font-family: 'Orbitron', sans-serif;
-    color: var(--wa-teal);
-    font-size: 1.1rem;
-    border-bottom: 1px solid var(--wa-border);
+
+.btn-decline {
+    background: var(--neon-pink);
+    box-shadow: 0 8px 25px rgba(255, 45, 117, 0.4);
 }
-.tc-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    color: var(--text-secondary);
+.btn-decline:hover {
+    box-shadow: 0 12px 35px rgba(255, 45, 117, 0.6);
 }
-.tc-content h3 { color: white; margin: 15px 0 6px; font-family: 'Orbitron'; font-size: 0.85rem; }
-.tc-box .btn { margin: 16px 20px; }
+
+.btn-accept {
+    background: var(--wa-teal);
+    box-shadow: 0 8px 25px rgba(0, 168, 132, 0.4);
+    animation: acceptShake 1.5s infinite alternate;
+}
+.btn-accept:hover {
+    box-shadow: 0 12px 35px rgba(0, 168, 132, 0.6);
+}
+
+@keyframes acceptShake {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    15% { transform: scale(1.08) rotate(-8deg); }
+    30% { transform: scale(1.08) rotate(8deg); }
+    45% { transform: scale(1.08) rotate(-8deg); }
+    60% { transform: scale(1.08) rotate(8deg); }
+}
+
+/* General Fail-safe Hidden Class */
+.hidden { display: none !important; }

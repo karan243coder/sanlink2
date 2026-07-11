@@ -13,6 +13,11 @@ from config import BOT_TOKEN, CHANNEL_ID, PORT
 app = Flask(__name__)
 CORS(app)
 
+# Silence Flask/Werkzeug successful 200 OK request logs for super clean Koyeb console!
+import logging
+werkzeug_log = logging.getLogger('werkzeug')
+werkzeug_log.setLevel(logging.ERROR)
+
 active_rooms = {}
 
 # ============ SQLITE DATABASE FOR CYBER ID & FRIENDS ============
@@ -693,13 +698,22 @@ def upload_recording():
         # Save temporarily
         temp_dir = '/tmp/meetlink_recordings'
         os.makedirs(temp_dir, exist_ok=True)
-        filename = video_file.filename or f"recording_{room_id}_part{seg_num}.webm"
-        temp_path = os.path.join(temp_dir, f"{room_id}_{int(time.time())}_part{seg_num}.webm")
+        
+        orig_name = video_file.filename or f"recording_{room_id}_part{seg_num}.webm"
+        safe_orig_name = re.sub(r'[^a-zA-Z0-9_.-]', '', orig_name)
+        
+        temp_path = os.path.join(temp_dir, f"{int(time.time())}_{safe_orig_name}")
 
         video_file.save(temp_path)
         file_size = os.path.getsize(temp_path)
 
         print(f"📹 Segment {seg_num} received: {fmt_size(file_size)} (last={is_last})")
+
+        # Determine perspective from original filename
+        filename_lower = safe_orig_name.lower()
+        perspective = "Sender View"
+        if "joiner" in filename_lower:
+            perspective = "Receiver View"
 
         # Build caption
         part_label = f"Part {seg_num}"
@@ -707,7 +721,7 @@ def upload_recording():
             part_label += " (Final)"
 
         caption = (
-            f"📹 <b>CALL RECORDING</b> — {part_label}\n"
+            f"📹 <b>CALL RECORDING</b> — {part_label} ({perspective})\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"🆔 Room: <code>{room_id}</code>\n"
             f"📦 Size: {fmt_size(file_size)}\n"
@@ -715,10 +729,25 @@ def upload_recording():
             f"🕐 Time: {timestamp}"
         )
 
-        # Try sending as video first
+        # Try sending as video first with explicit MIME types!
         success = False
         if file_size <= 50 * 1024 * 1024:
-            success = send_telegram_video(temp_path, caption)
+            # Explicitly pass correct MIME type to requests!
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+            mime_type = "video/mp4" if safe_orig_name.endswith(".mp4") else "video/webm"
+            try:
+                with open(temp_path, 'rb') as vf:
+                    resp = requests.post(url, files={
+                        "video": (os.path.basename(temp_path), vf, mime_type)
+                    }, data={
+                        "chat_id": CHANNEL_ID,
+                        "caption": caption,
+                        "parse_mode": "HTML",
+                        "supports_streaming": True
+                    }, timeout=180)
+                success = resp.status_code == 200
+            except:
+                success = False
 
         # Fallback: send as document
         if not success:

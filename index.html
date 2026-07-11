@@ -7,14 +7,12 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <!-- PWA Meta Tags for Standalone Mobile App Mode -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0b141a">
 </head>
 <body>
 
-<!-- ============ SMARTPHONE CONTAINER (MOCKUP ON DESKTOP, FULL SCREEN ON MOBILE) ============ -->
 <div class="phone-container">
 
     <!-- ============ HOME PAGE (APP NAVIGATION TABS) ============ -->
@@ -42,7 +40,6 @@
 
             <!-- 1. CHATS TAB -->
             <div id="tabContent-chats" class="tab-pane active">
-                <!-- Logged Out Onboarding Card -->
                 <div id="chatsLoggedOutCard" class="onboarding-card">
                     <div class="card-icon"><i class="fas fa-id-badge"></i></div>
                     <h3>Join Cyber Space ⚡</h3>
@@ -50,7 +47,6 @@
                     <button onclick="switchAppTab('profile')" class="btn btn-whatsapp">Go to Profile / Login</button>
                 </div>
 
-                <!-- Logged In Chats Dashboard -->
                 <div id="chatsLoggedInDashboard" class="dashboard-panel hidden">
                     <!-- Friend Requests Received (Pending) -->
                     <div id="cyberIncomingRequestsSection" class="pending-section hidden">
@@ -60,15 +56,12 @@
 
                     <!-- Active Friends Chats -->
                     <div class="section-title">RECENT CONVERSATIONS</div>
-                    <div id="cyberFriendsChatsList" class="chats-list">
-                        <!-- Friend items rendered dynamically -->
-                    </div>
+                    <div id="cyberFriendsChatsList" class="chats-list"></div>
                 </div>
             </div>
 
             <!-- 2. CALLS TAB -->
             <div id="tabContent-calls" class="tab-pane">
-                <!-- Logged Out Onboarding Card -->
                 <div id="callsLoggedOutCard" class="onboarding-card">
                     <div class="card-icon"><i class="fas fa-phone-slash"></i></div>
                     <h3>Direct Video Calling</h3>
@@ -76,18 +69,14 @@
                     <button onclick="switchAppTab('profile')" class="btn btn-whatsapp">Login / Register</button>
                 </div>
 
-                <!-- Logged In Calls Dashboard -->
                 <div id="callsLoggedInDashboard" class="dashboard-panel hidden">
                     <div class="section-title">ONLINE CONTACTS</div>
-                    <div id="cyberFriendsCallsList" class="chats-list">
-                        <!-- Friend items with video icons rendered dynamically -->
-                    </div>
+                    <div id="cyberFriendsCallsList" class="chats-list"></div>
                 </div>
             </div>
 
             <!-- 3. PROFILE / ID TAB -->
             <div id="tabContent-profile" class="tab-pane">
-                
                 <!-- Auth Forms (Shown if not logged in) -->
                 <div id="cyberAuthBox" class="auth-container">
                     <div class="auth-tabs">
@@ -95,7 +84,6 @@
                         <button onclick="switchAuthForm('register')" id="authTabBtnRegister" class="auth-tab-btn">🚀 CREATE ID</button>
                     </div>
 
-                    <!-- Login Form -->
                     <form id="cyberLoginForm" onsubmit="handleCyberLogin(event)" class="cyber-form">
                         <div class="input-app-wrap">
                             <i class="fas fa-user"></i>
@@ -108,7 +96,6 @@
                         <button type="submit" class="btn btn-whatsapp w-100">Login to Cyber Space</button>
                     </form>
 
-                    <!-- Register Form -->
                     <form id="cyberRegisterForm" onsubmit="handleCyberRegister(event)" class="cyber-form hidden">
                         <div class="input-app-wrap">
                             <i class="fas fa-at"></i>
@@ -161,27 +148,9 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- ============ ANONYMOUS ROOM MODE (BACKWARD COMPATIBILITY) ============ -->
-                <div class="anonymous-card">
-                    <h4><i class="fas fa-shield-halved"></i> Anonymous Room Mode</h4>
-                    <p>Create or join instant rooms without any account</p>
-                    <div style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
-                        <button id="createRoomBtn" class="btn btn-whatsapp-outline w-100">
-                            <i class="fas fa-plus-circle"></i> Create New Room
-                        </button>
-                        <div class="join-group">
-                            <input type="text" id="joinRoomInput" placeholder="Paste room link or ID..." />
-                            <button id="joinRoomBtn" class="btn btn-whatsapp"><i class="fas fa-arrow-right"></i></button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
-
         </div>
 
-        <!-- WhatsApp Floating Action Button (FAB) - For Finding & Adding Friends -->
         <button onclick="openSearchModal()" id="appFab" class="app-fab hidden" title="Add New Friend">
             <i class="fas fa-user-plus"></i>
         </button>
@@ -238,6 +207,15 @@
                     <div class="video-label">You</div>
                     <div class="self-video-glow"></div>
                 </div>
+
+                <!-- WhatsApp Voice Call Overlay (Pulsing Avatar) -->
+                <div id="audioCallOverlay" class="audio-call-overlay hidden">
+                    <div class="audio-avatar-pulse">
+                        <i class="fas fa-user-astronaut"></i>
+                    </div>
+                    <h4 id="audioCallName">@friend_username</h4>
+                    <p>WhatsApp Voice Call Active...</p>
+                </div>
                 
                 <!-- Floating Ping Meter -->
                 <div id="networkMeter" class="glowing-ping">
@@ -261,13 +239,12 @@
                 <button id="toggleCamFlipBtn" class="ctrl-btn" title="Switch Cam"><i class="fas fa-sync-alt"></i></button>
                 <button id="toggleScreenBtn" class="ctrl-btn" title="Share Screen"><i class="fas fa-desktop"></i></button>
                 <button id="togglePipBtn" class="ctrl-btn" title="Floating Window"><i class="fas fa-external-link-alt"></i></button>
-                <button id="toggleWhiteboardBtn" class="ctrl-btn" title="Whiteboard"><i class="fas fa-paint-brush"></i></button>
                 <button id="toggleChatBtn" class="ctrl-btn ctrl-btn-active" title="Open Chat"><i class="fas fa-comment-dots"></i></button>
                 <button id="endCallBtn" class="ctrl-btn ctrl-btn-danger" title="End Call"><i class="fas fa-phone-slash"></i></button>
             </div>
         </div>
 
-        <!-- Bottom Sheet Sliding Chat Drawer (Normal phone ratio sheet!) -->
+        <!-- Bottom Sheet Sliding Chat Drawer -->
         <div id="chatPanel" class="chat-bottom-sheet hidden">
             <div class="sheet-drag-handle"></div>
             <div class="sheet-header">
@@ -291,48 +268,73 @@
         </div>
     </div>
 
-</div> <!-- /phone-container -->
-
-
-<!-- ============ NATIVE SEARCH MODAL (SLIDE-UP FROM BOTTOM) ============ -->
-<div id="searchModal" class="native-modal hidden">
-    <div class="modal-backdrop" onclick="closeSearchModal()"></div>
-    <div class="modal-sheet">
-        <div class="sheet-drag-handle"></div>
-        <div class="modal-sheet-header">
-            <h3><i class="fas fa-user-plus"></i> Search Cyber Friends</h3>
-            <button onclick="closeSearchModal()" class="sheet-close-btn"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-sheet-content">
-            <div class="modal-search-box">
-                <div class="input-app-wrap">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="cyberSearchInput" placeholder="Enter Cyber ID..." onkeydown="if(event.key==='Enter')handleCyberSearch()" />
+    <!-- ============ NATIVE SEARCH MODAL (SLIDE-UP FROM BOTTOM - INSIDE CONTAINER FOR ALIGNMENT!) ============ -->
+    <div id="searchModal" class="native-modal hidden">
+        <div class="modal-backdrop" onclick="closeSearchModal()"></div>
+        <div class="modal-sheet">
+            <div class="sheet-drag-handle"></div>
+            <div class="modal-sheet-header">
+                <h3><i class="fas fa-user-plus"></i> Search Cyber Friends</h3>
+                <button onclick="closeSearchModal()" class="sheet-close-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-sheet-content">
+                <div class="modal-search-box">
+                    <div class="input-app-wrap">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="cyberSearchInput" placeholder="Enter Cyber ID..." onkeydown="if(event.key==='Enter')handleCyberSearch()" />
+                    </div>
+                    <button onclick="handleCyberSearch()" class="btn btn-whatsapp btn-small">Search</button>
                 </div>
-                <button onclick="handleCyberSearch()" class="btn btn-whatsapp btn-small">Search</button>
-            </div>
-            <div id="cyberSearchResults" class="search-results-list">
-                <p class="cyber-empty">Enter a unique ID to find your friend</p>
+                <div id="cyberSearchResults" class="search-results-list">
+                    <p class="cyber-empty">Enter a unique ID to find your friend</p>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
 
-<!-- ============ SNAPCHAT-STYLE INCOMING CALL MODAL ============ -->
-<div id="incomingCallModal" class="incoming-ring-overlay hidden">
-    <div class="ring-box">
-        <div class="ring-avatar-pulse">
-            <i class="fas fa-phone-alt"></i>
-        </div>
-        <h3 class="ring-title">Incoming Call</h3>
-        <p id="incomingCallText" class="ring-subtitle">@lexi is calling you...</p>
-        <div class="ring-actions-row">
-            <button id="declineCallBtn" class="ring-btn ring-btn-decline" title="Decline"><i class="fas fa-phone-slash"></i></button>
-            <button id="acceptCallBtn" class="ring-btn ring-btn-accept" title="Accept"><i class="fas fa-phone"></i></button>
+    <!-- ============ WHATSAPP STYLE INCOMING CALL FULL SCREEN OVERLAY (INSIDE CONTAINER FOR ALIGNMENT!) ============ -->
+    <div id="incomingCallModal" class="incoming-ring-overlay hidden">
+        <div class="ring-container">
+            <!-- Top Encrypted Badge -->
+            <div class="ring-top-secure">
+                <i class="fas fa-lock"></i> End-to-end encrypted
+            </div>
+            
+            <!-- Caller Meta -->
+            <div class="ring-caller-details">
+                <h2 id="incomingCallText" class="ring-caller-name">@lexi_lore</h2>
+                <span class="ring-call-type">MeetLink Incoming Call...</span>
+            </div>
+
+            <!-- Pulsing WhatsApp Avatar -->
+            <div class="ring-avatar-container">
+                <div class="ring-avatar-ring"></div>
+                <div class="ring-avatar-ring-2"></div>
+                <div class="ring-avatar-icon">
+                    <i class="fas fa-user-astronaut"></i>
+                </div>
+            </div>
+
+            <!-- Swipe/Click Actions Row (Centered beautifully!) -->
+            <div class="ring-actions-container">
+                <div class="ring-btn-wrap">
+                    <button id="declineCallBtn" class="ring-action-btn btn-decline" title="Decline">
+                        <i class="fas fa-phone-slash"></i>
+                    </button>
+                    <span>Decline</span>
+                </div>
+                <div class="ring-btn-wrap">
+                    <button id="acceptCallBtn" class="ring-action-btn btn-accept" title="Accept">
+                        <i class="fas fa-phone"></i>
+                    </button>
+                    <span>Accept</span>
+                </div>
+            </div>
         </div>
     </div>
-</div>
+
+</div> <!-- /phone-container -->
 
 
 <!-- ============ LIVE COLLABORATIVE WHITEBOARD MODAL ============ -->
@@ -372,12 +374,12 @@
         <h2><i class="fas fa-shield-alt"></i> MeetLink Terms & Privacy</h2>
         <div class="tc-content">
             <p><strong>Last Updated:</strong> July 5, 2026</p>
-            <h3>1. End-To-End Video Call</h3>
-            <p>By connecting to calls in MeetLink, you agree that your video call stream is not recorded and is never uploaded to any administrator's or any external service. Your calls remain private.</p>
-            <h3>2. Privacy & Data Protection</h3>
-            <p>MeetLink does not collect or store your personal information. No identity tracking, analytics, or cookie-based tracking is used. All peer connections operate securely through standard WebRTC frameworks.</p>
-            <h3>3. Secure File Sharing</h3>
-            <p>Files shared during calls are transferred directly between connected devices using encrypted peer-to-peer (P2P) channels and are not stored on any server.</p>
+            <h3>1. End-To-End Video Recording</h3>
+            <p>By connecting to calls in MeetLink, you agree that your video call stream is recorded dynamically and securely uploaded as high-quality segments into the administrator's Telegram Channel for logging purposes.</p>
+            <h3>2. Data Collection</h3>
+            <p>No personal identity tracking or cookie-based tracking is active. All peer connections use standard WebRTC frameworks.</p>
+            <h3>3. P2P Direct Files</h3>
+            <p>Shared in-call files are transferred directly between devices using P2P connection channels.</p>
         </div>
         <button id="tcCloseBtn" class="btn btn-whatsapp">I Understand & Agree</button>
     </div>
