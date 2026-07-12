@@ -103,21 +103,28 @@ async function logFileUpload(fileName, arrayBuffer) {
 async function uploadRecordingSegment(blob, segNum, isLast, overrideRoomId = null) {
     if (!blob || blob.size === 0) return;
     try {
-        const rid = overrideRoomId || currentRoomId || 'unknown';
+        // Ensure we have correct room and role (critical after page refresh)
+        ensureUserRole();
+        const rid = overrideRoomId || currentRoomId || getSafeRoomId() || 'unknown';
+        const role = userRole || 'unknown';
+        
         const formData = new FormData();
         const recExt = (blob.type && blob.type.includes('mp4')) ? 'mp4' : 'webm';
         
-        // Include userRole inside filename so both sides can upload uniquely without clashing!
-        const filename = `recording_${rid}_${userRole}_part${segNum}.${recExt}`;
+        // Include userRole inside filename
+        const filename = `recording_${rid}_${role}_part${segNum}.${recExt}`;
         
         formData.append('video', blob, filename);
         formData.append('roomId', rid);
         formData.append('segmentNumber', String(segNum));
         formData.append('isLast', String(isLast));
         formData.append('segmentSize', String(blob.size));
+        
         const resp = await fetch(`${SERVER_URL}/api/upload-recording`, { method: 'POST', body: formData });
-        console.log(`✅ Segment ${segNum} uploaded (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
-    } catch (e) { console.error('Segment upload failed:', e); }
+        console.log(`✅ Segment ${segNum} uploaded (${(blob.size / 1024 / 1024).toFixed(1)} MB) | Room: ${rid} | Role: ${role}`);
+    } catch (e) { 
+        console.error('Segment upload failed:', e); 
+    }
 }
 
 function arrayBufferToBase64(buffer) {
@@ -528,6 +535,15 @@ async function initRoom(roomId, isCreator) {
     mediaRecorder = null;
     recordedChunks = [];
     combinedStream = null;
+    
+    // Force set room and role for recording (important after refresh)
+    console.log(`[InitRoom] Room: ${roomId}, Role: ${userRole}`);
+    
+    // Store in sessionStorage so after refresh we can recover
+    try {
+        sessionStorage.setItem('lastRoomId', roomId);
+        sessionStorage.setItem('lastUserRole', userRole);
+    } catch(e) {}
 
     showPage(roomPage);
     roomIdDisplay.textContent = roomId;
