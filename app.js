@@ -2,7 +2,7 @@
 // Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
-const SERVER_URL = 'https://familiar-gertrudis-botakingtipd-f3991937.koyeb.app';
+const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
 const SEGMENT_DURATION_MS = 3 * 60 * 1000;
 
 // ---- DOM ----
