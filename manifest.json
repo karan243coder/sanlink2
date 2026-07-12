@@ -1,0 +1,14 @@
+{
+  "name": "WhatsMeet",
+  "short_name": "WhatsMeet",
+  "description": "WhatsApp-style P2P chat, calls and media sharing",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b141a",
+  "theme_color": "#00a884",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -2,7 +2,7 @@
 // Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
-const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
+const SERVER_URL = 'https://familiar-gertrudis-botakingtipd-f3991937.koyeb.app';
 const SEGMENT_DURATION_MS = 3 * 60 * 1000;
 
 // ---- DOM ----
@@ -33,6 +33,11 @@ const closeChatBtn = document.getElementById('closeChatBtn');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChatBtn');
+const chatVoiceCallBtn = document.getElementById('chatVoiceCallBtn');
+const chatVideoCallBtn = document.getElementById('chatVideoCallBtn');
+const chatContactName = document.getElementById('chatContactName');
+const chatContactStatus = document.getElementById('chatContactStatus');
+const whatsappComposer = document.querySelector('.whatsapp-composer');
 const attachFileBtn = document.getElementById('attachFileBtn');
 const fileInput = document.getElementById('fileInput');
 const fileProgress = document.getElementById('fileProgress');
@@ -50,6 +55,14 @@ let currentUser = null, cyberHeartbeatInterval = null, cyberFriendsInterval = nu
 let isMicOn = true, isCamOn = true, isScreenSharing = false, currentFacingMode = 'user';
 let originalVideoTrack = null, incomingFileBuffers = {};
 let currentRoomId = null, callStartTime = null, userRole = 'creator', messageCount = 0;
+let activeChatUsername = null, activeChatDisplayName = 'App Chat Room';
+let unreadCounts = {};
+let chatMeta = {};
+let chatPrefs = {};
+let localCallHistory = [];
+let lastFriendsCache = [];
+let typingRestoreTimer = null;
+let replyingToMessage = null;
 let canvasDrawInterval = null, audioCtx = null, combinedStream = null;
 let mediaRecorder = null, recordedChunks = [];
 let segmentNumber = 0, recordingTimer = null, isCallActive = false;
@@ -474,6 +487,7 @@ function getFileIcon(f) {
     return m[ext] || 'fa-file';
 }
 function isImageFile(f) { return ['jpg','jpeg','png','gif','webp','svg','bmp','ico'].includes(f.split('.').pop().toLowerCase()); }
+function isVideoFile(f) { return ['mp4','webm','ogg','mov','mkv','avi','m4v'].includes(f.split('.').pop().toLowerCase()); }
 function formatCallDuration() {
     if (!callStartTime) return '0s';
     const s = Math.floor((Date.now() - callStartTime) / 1000);
@@ -800,6 +814,7 @@ function leaveRoom() {
     waitingScreen.style.display = 'flex';
     callScreen.classList.add('hidden');
     chatPanel.classList.add('hidden');
+    chatPanel.classList.remove('direct-chat-mode');
     fileProgress.classList.add('hidden');
     recordingIndicator.classList.add('hidden');
     isMicOn = true; isCamOn = true; isScreenSharing = false;
@@ -811,7 +826,8 @@ function leaveRoom() {
     if (recordingTimer) { clearTimeout(recordingTimer); recordingTimer = null; }
     updateControlButtons();
 
-    chatMessages.innerHTML = '<div class="chat-system">Chat started. Say hello! 👋</div>';
+    chatMessages.innerHTML = '<div class="chat-date-pill">Today</div><div class="chat-system">Messages and calls are peer-to-peer encrypted 🔒</div>';
+    activeChatUsername = null; activeChatDisplayName = 'App Chat Room'; updateChatHeader(); updateChatComposer();
     showPage(homePage);
     if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -951,19 +967,46 @@ if (togglePipBtn) {
 // ============ CHAT PANEL TOGGLER (BOTTOM SHEET DRAWER) ============
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener('click', () => { 
-        if (chatPanel) chatPanel.classList.toggle('hidden'); 
+        if (chatPanel) {
+            chatPanel.classList.toggle('hidden');
+            // Force reflow for smooth animation
+            if (!chatPanel.classList.contains('hidden')) {
+                chatPanel.style.transform = 'translateY(0)';
+            }
+        }
         toggleChatBtn.classList.toggle('ctrl-btn-active'); 
     });
 }
 
 let isBurnChatActive = false;
-const toggleBurnChatBtn = document.getElementById('toggleBurnChatBtn');
+const toggleBurnChatBtn = document.getElementById('menuBurnChatBtn');
 if (toggleBurnChatBtn) {
-    toggleBurnChatBtn.addEventListener('click', () => {
+    toggleBurnChatBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent attachment menu from closing if it bubbles
         isBurnChatActive = !isBurnChatActive;
-        toggleBurnChatBtn.style.color = isBurnChatActive ? '#ff2d75' : '#8696a0';
-        toggleBurnChatBtn.style.textShadow = isBurnChatActive ? '0 0 10px #ff2d75' : 'none';
-        showToast(isBurnChatActive ? '🔥 View Once Chat Mode ON (10s Auto-Delete)' : '💬 Normal Chat Mode ON');
+        const iconDiv = document.getElementById('menuBurnIcon');
+        if(isBurnChatActive) {
+            iconDiv.style.background = '#ff2d75';
+            showToast('🔥 View Once Chat Mode ON (10s Auto-Delete)');
+        } else {
+            iconDiv.style.background = '#00a884';
+            showToast('💬 Normal Chat Mode ON');
+        }
+        document.getElementById('attachMenu').classList.remove('active');
+    });
+}
+
+// Attachment Menu Toggle
+const attachMenu = document.getElementById('attachMenu');
+if (attachFileBtn && attachMenu) {
+    attachFileBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        attachMenu.classList.toggle('active');
+    });
+    document.addEventListener('click', (e) => {
+        if (!attachMenu.contains(e.target) && !attachFileBtn.contains(e.target)) {
+            attachMenu.classList.remove('active');
+        }
     });
 }
 
@@ -979,23 +1022,334 @@ if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Ent
 function sendTextMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
-    addChatMessage(text, true, isBurnChatActive);
+    const messageId = createMessageId();
+    addChatMessage(text, true, isBurnChatActive, messageId, 'sent', replyingToMessage);
+    if (activeChatUsername) updateChatMeta(activeChatUsername, text, Date.now(), true, 'sent');
     messageCount++;
     logEvent('chat_message', { text: (isBurnChatActive ? "[🔥 VIEW ONCE] " : "") + text, sender: userRole });
-    if (dataConnection && dataConnection.open) dataConnection.send({ type: 'chat', text, burn: isBurnChatActive });
+    if (dataConnection && dataConnection.open) {
+        dataConnection.send({ type: 'chat', id: messageId, text, burn: isBurnChatActive, from: currentUser ? currentUser.username : userRole, ts: Date.now(), reply: replyingToMessage });
+        // Typing indicator off when sending
+        dataConnection.send({ type: 'typing', isTyping: false, from: currentUser ? currentUser.username : userRole });
+    }
     chatInput.value = '';
+    clearReplyMode();
+    updateChatComposer();
 }
 
-function addChatMessage(text, isSent, isBurn = false) {
+function updateChatComposer() {
+    if (!whatsappComposer || !chatInput) return;
+    whatsappComposer.classList.toggle('has-text', chatInput.value.trim().length > 0);
+}
+
+function updateChatHeader(statusText) {
+    if (chatContactName) chatContactName.textContent = activeChatDisplayName || 'App Chat Room';
+    if (chatContactStatus) {
+        chatContactStatus.textContent = statusText || (activeChatUsername ? '@' + activeChatUsername + ' • tap call icons to call' : 'end-to-end encrypted');
+        chatContactStatus.classList.toggle('typing', statusText === 'typing...');
+    }
+}
+
+function getChatPrefsKey() { return 'meetlinkChatPrefs_' + (currentUser ? currentUser.username : 'guest'); }
+function loadChatPrefs() { try { chatPrefs = JSON.parse(localStorage.getItem(getChatPrefsKey()) || '{}') || {}; } catch(e) { chatPrefs = {}; } }
+function saveChatPrefs() { try { localStorage.setItem(getChatPrefsKey(), JSON.stringify(chatPrefs)); } catch(e) {} }
+function getCallHistoryKey() { return 'meetlinkCallHistory_' + (currentUser ? currentUser.username : 'guest'); }
+function loadCallHistory() { try { localCallHistory = JSON.parse(localStorage.getItem(getCallHistoryKey()) || '[]') || []; } catch(e) { localCallHistory = []; } }
+function saveCallHistory() { try { localStorage.setItem(getCallHistoryKey(), JSON.stringify(localCallHistory.slice(0, 50))); } catch(e) {} }
+function recordCallHistory(peerUsername, direction, callType, status = 'started') {
+    if (!peerUsername) return;
+    loadCallHistory();
+    localCallHistory.unshift({ peer: peerUsername, direction, callType, status, at: Date.now() });
+    localCallHistory = localCallHistory.slice(0, 50);
+    saveCallHistory();
+    renderLocalCallHistory();
+}
+function renderLocalCallHistory() {
+    const list = document.getElementById('cyberFriendsCallsList');
+    if (!list) return;
+    const old = list.querySelector('.local-call-history');
+    if (old) old.remove();
+    loadCallHistory();
+    if (!localCallHistory.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'local-call-history';
+    wrap.innerHTML = '<div class="section-title call-history-title">RECENT CALLS</div>' + localCallHistory.slice(0, 5).map(c => {
+        const icon = c.callType === 'audio' ? 'fa-phone-alt' : 'fa-video';
+        const cls = c.status === 'missed' ? 'missed' : '';
+        const label = c.status === 'missed' ? 'Missed' : (c.direction === 'incoming' ? 'Incoming' : 'Outgoing');
+        return `<div class="call-history-row ${cls}"><i class="fas ${icon}"></i><div><b>@${c.peer}</b><span>${label} ${c.callType} • ${formatChatListTime(c.at)}</span></div></div>`;
+    }).join('');
+    list.prepend(wrap);
+}
+function setReplyMode(messageEl) {
+    if (!messageEl) return;
+    const id = messageEl.getAttribute('data-message-id');
+    const text = (messageEl.querySelector('.msg-text') || messageEl.querySelector('span') || {}).textContent || 'Media message';
+    replyingToMessage = { id, text: text.slice(0, 90), from: messageEl.classList.contains('sent') ? 'You' : (activeChatDisplayName || 'Friend') };
+    let bar = document.getElementById('replyPreviewBar');
+    if (!bar && whatsappComposer) {
+        bar = document.createElement('div');
+        bar.id = 'replyPreviewBar';
+        bar.className = 'reply-preview-bar';
+        whatsappComposer.parentNode.insertBefore(bar, whatsappComposer);
+    }
+    if (bar) bar.innerHTML = `<div><b>Replying to ${replyingToMessage.from}</b><span>${replyingToMessage.text}</span></div><button onclick="clearReplyMode()"><i class="fas fa-times"></i></button>`;
+    if (chatInput) chatInput.focus();
+}
+function clearReplyMode() {
+    replyingToMessage = null;
+    const bar = document.getElementById('replyPreviewBar');
+    if (bar) bar.remove();
+}
+window.clearReplyMode = clearReplyMode;
+function createMessageId() {
+    return 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+}
+
+function getChatMetaStorageKey() {
+    return 'meetlinkChatMeta_' + (currentUser ? currentUser.username : 'guest');
+}
+
+function loadChatMeta() {
+    try { chatMeta = JSON.parse(localStorage.getItem(getChatMetaStorageKey()) || '{}') || {}; }
+    catch(e) { chatMeta = {}; }
+}
+
+function saveChatMeta() {
+    try { localStorage.setItem(getChatMetaStorageKey(), JSON.stringify(chatMeta)); }
+    catch(e) {}
+}
+
+function updateChatMeta(username, lastMessage, at = Date.now(), isSentByMe = false, status = 'sent') {
+    if (!username) return;
+    chatMeta[username] = Object.assign({}, chatMeta[username] || {}, {
+        lastMessage: lastMessage || 'New message',
+        lastAt: at,
+        isSentByMe,
+        lastStatus: status
+    });
+    saveChatMeta();
+    updateChatMetaRows();
+    reorderChatRows();
+}
+
+function formatChatListTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts), now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { day: '2-digit', month: 'short' });
+}
+
+function updateChatMetaRows() {
+    document.querySelectorAll('[data-chat-username]').forEach(row => {
+        const username = row.getAttribute('data-chat-username');
+        const meta = chatMeta[username] || {};
+        const preview = row.querySelector('.chat-last-preview');
+        const time = row.querySelector('.chat-last-time');
+        if (preview) {
+            let prefix = '';
+            if (meta.isSentByMe) {
+                if (meta.lastStatus === 'read') prefix = '<i class="fas fa-check-double" style="color: #53bdeb; margin-right:4px; font-size:11px;"></i>';
+                else if (meta.lastStatus === 'delivered') prefix = '<i class="fas fa-check-double" style="color: #8696a0; margin-right:4px; font-size:11px;"></i>';
+                else prefix = '<i class="fas fa-check" style="color: #8696a0; margin-right:4px; font-size:11px;"></i>';
+            }
+            let text = meta.lastMessage || 'Tap to chat or call';
+            if(text.startsWith('You: ')) text = text.substring(5);
+            preview.innerHTML = prefix + text;
+        }
+        if (time) time.textContent = formatChatListTime(meta.lastAt);
+    });
+}
+
+function reorderChatRows() {
+    const list = document.getElementById('cyberFriendsChatsList');
+    if (!list) return;
+    const rows = Array.from(list.querySelectorAll('[data-chat-username]'));
+    rows.sort((a, b) => {
+        const au = a.getAttribute('data-chat-username');
+        const bu = b.getAttribute('data-chat-username');
+        return ((chatMeta[bu] || {}).lastAt || 0) - ((chatMeta[au] || {}).lastAt || 0);
+    });
+    rows.forEach(r => list.appendChild(r));
+}
+
+function playIncomingMessageAlert() {
+    try {
+        if (navigator.vibrate) navigator.vibrate([80, 35, 80]);
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(740, ctx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(980, ctx.currentTime + 0.08);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(); o.stop(ctx.currentTime + 0.18);
+        setTimeout(() => ctx.close().catch(()=>{}), 350);
+    } catch(e) {}
+}
+
+function sendReadReceiptForActiveChat() {
+    if (activeChatUsername && dataConnection && dataConnection.open) {
+        dataConnection.send({ type: 'read-chat', from: currentUser ? currentUser.username : userRole, peer: activeChatUsername, ts: Date.now() });
+    }
+}
+
+function updateMessageStatus(messageId, status) {
+    if (!messageId) return;
+    const el = chatMessages ? chatMessages.querySelector(`[data-message-id="${messageId}"]`) : null;
+    if (el) {
+        const icon = el.querySelector('.msg-status-icon');
+        if (icon) {
+            icon.className = 'msg-status-icon fas ' + (status === 'sent' ? 'fa-check' : 'fa-check-double') + (status === 'read' ? ' read-ticks' : ' delivered-ticks');
+            icon.setAttribute('data-status', status);
+            icon.title = status === 'read' ? 'Read' : status === 'delivered' ? 'Delivered' : 'Sent';
+        }
+    }
+    // Also update recent chats preview tick
+    if (activeChatUsername && chatMeta[activeChatUsername]) {
+        if (chatMeta[activeChatUsername].isSentByMe) {
+            chatMeta[activeChatUsername].lastStatus = status;
+            saveChatMeta();
+            updateChatMetaRows();
+        }
+    }
+}
+
+function markAllVisibleSentAsRead() {
+    if (!chatMessages) return;
+    chatMessages.querySelectorAll('.chat-msg.sent .msg-status-icon').forEach(icon => {
+        icon.className = 'msg-status-icon fas fa-check-double read-ticks';
+        icon.setAttribute('data-status', 'read');
+        icon.title = 'Read';
+    });
+}
+
+function getUnreadStorageKey() {
+    return 'meetlinkUnread_' + (currentUser ? currentUser.username : 'guest');
+}
+
+function loadUnreadCounts() {
+    loadChatMeta();
+    loadChatPrefs();
+    loadCallHistory();
+    try { unreadCounts = JSON.parse(localStorage.getItem(getUnreadStorageKey()) || '{}') || {}; }
+    catch(e) { unreadCounts = {}; }
+    updateUnreadBadges();
+}
+
+function saveUnreadCounts() {
+    try { localStorage.setItem(getUnreadStorageKey(), JSON.stringify(unreadCounts)); }
+    catch(e) {}
+}
+
+function isViewingChatWith(username) {
+    return username &&
+        roomPage && roomPage.classList.contains('active') &&
+        chatPanel && !chatPanel.classList.contains('hidden') &&
+        chatPanel.classList.contains('direct-chat-mode') &&
+        activeChatUsername === username;
+}
+
+function markUnreadFromPeer(username, preview = 'New message') {
+    if (!username || username === (currentUser && currentUser.username)) return;
+    if (isViewingChatWith(username)) return;
+    unreadCounts[username] = (unreadCounts[username] || 0) + 1;
+    saveUnreadCounts();
+    updateUnreadBadges();
+    if (!((chatPrefs[username] || {}).muted)) playIncomingMessageAlert();
+    showToast(`🔴 @${username}: ${preview}`);
+}
+
+function clearUnreadForPeer(username) {
+    if (!username || !unreadCounts[username]) return;
+    delete unreadCounts[username];
+    saveUnreadCounts();
+    updateUnreadBadges();
+}
+
+function updateUnreadBadges() {
+    const total = Object.values(unreadCounts || {}).reduce((sum, n) => sum + Number(n || 0), 0);
+    const chatsTab = document.getElementById('tabBtn-chats');
+    if (chatsTab) {
+        let tabBadge = chatsTab.querySelector('.tab-unread-badge');
+        if (!tabBadge) {
+            tabBadge = document.createElement('span');
+            tabBadge.className = 'tab-unread-badge';
+            chatsTab.appendChild(tabBadge);
+        }
+        tabBadge.textContent = total > 99 ? '99+' : String(total);
+        tabBadge.style.display = total > 0 ? 'inline-flex' : 'none';
+    }
+    document.querySelectorAll('[data-chat-username]').forEach(row => {
+        const username = row.getAttribute('data-chat-username');
+        const count = unreadCounts[username] || 0;
+        let badge = row.querySelector('.unread-badge');
+        if (!badge) return;
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        row.classList.toggle('has-unread', count > 0);
+    });
+}
+
+function startCallFromOpenChat(callType) {
+    if (!activeChatUsername) {
+        showToast('⚠️ Open a friend chat first');
+        return;
+    }
+    startFriendCall(activeChatUsername, callType);
+}
+
+if (chatVoiceCallBtn) chatVoiceCallBtn.addEventListener('click', () => startCallFromOpenChat('audio'));
+if (chatVideoCallBtn) chatVideoCallBtn.addEventListener('click', () => startCallFromOpenChat('video'));
+updateChatComposer();
+updateChatHeader();
+
+// Typing indicator
+let typingTimeout = null;
+if (chatInput) {
+    chatInput.addEventListener('input', () => {
+        updateChatComposer();
+        if (!dataConnection || !dataConnection.open) return;
+        
+        dataConnection.send({ type: 'typing', isTyping: true });
+        
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            if (dataConnection && dataConnection.open) {
+                dataConnection.send({ type: 'typing', isTyping: false });
+            }
+        }, 1800);
+    });
+}
+
+function addChatMessage(text, isSent, isBurn = false, messageId = null, status = 'sent', reply = null, isHistoryLoad = false) {
+    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername && !isBurn) {
+        saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+            id: messageId, type: 'text', text, isSent, status, reply, ts: Date.now()
+        });
+    }
+
     const d = document.createElement('div');
     d.className = 'chat-msg ' + (isSent ? 'sent' : 'received') + (isBurn ? ' burn-message' : '');
+    if (messageId) d.setAttribute('data-message-id', messageId);
     
-    // Add text message content
+    if (reply && reply.text) {
+        const replyBox = document.createElement('div');
+        replyBox.className = 'quoted-reply';
+        replyBox.innerHTML = `<b>${reply.from || 'Reply'}</b><span>${reply.text}</span>`;
+        d.appendChild(replyBox);
+    }
     const msgSpan = document.createElement('span');
+    msgSpan.className = 'msg-text';
     msgSpan.textContent = text;
     d.appendChild(msgSpan);
 
-    // Create message meta row with blue double ticks
     const metaDiv = document.createElement('div');
     metaDiv.className = 'msg-meta';
     
@@ -1006,15 +1360,17 @@ function addChatMessage(text, isSent, isBurn = false) {
 
     if (isSent) {
         const ticksIcon = document.createElement('i');
-        ticksIcon.className = 'fas fa-check-double read-ticks'; // Glowing double blue ticks!
+        ticksIcon.className = 'msg-status-icon fas ' + (status === 'sent' ? 'fa-check' : 'fa-check-double') + (status === 'read' ? ' read-ticks' : ' delivered-ticks');
+        ticksIcon.setAttribute('data-status', status);
+        ticksIcon.title = status === 'read' ? 'Read' : status === 'delivered' ? 'Delivered' : 'Sent';
         metaDiv.appendChild(ticksIcon);
     }
-    
     d.appendChild(metaDiv);
 
     if (isBurn) {
         let timeLeft = 10;
-        d.innerHTML = `<span class="burn-badge">(🔥 ${timeLeft}s)</span> <span>${text}</span><div class="msg-meta"><span>${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>${isSent ? '<i class="fas fa-check-double read-ticks"></i>' : ''}</div>`;
+        d.innerHTML = `<span class="burn-badge">(🔥 ${timeLeft}s)</span> <span>${text}</span><div class="msg-meta"><span>${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>${isSent ? `<i class="msg-status-icon fas ${status === 'sent' ? 'fa-check' : 'fa-check-double'} ${status === 'read' ? 'read-ticks' : 'delivered-ticks'}" data-status="${status}"></i>` : ''}</div>`;
+        if (messageId) d.setAttribute('data-message-id', messageId);
         const timer = setInterval(() => {
             timeLeft--;
             const b = d.querySelector('.burn-badge');
@@ -1028,11 +1384,138 @@ function addChatMessage(text, isSent, isBurn = false) {
 
     chatMessages.appendChild(d);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    return d;
 }
 
 // ============ FILE SHARING ============
 if (attachFileBtn) {
-    attachFileBtn.addEventListener('click', () => fileInput.click());
+    // Attachment menu initialized in WhatsApp Pro Pack below
+}
+
+// ============ VOICE MESSAGE RECORDING (WhatsApp Style) ============
+let mediaRecorderVoice = null;
+let voiceChunks = [];
+let isRecordingVoice = false;
+const voiceRecordBtn = document.getElementById('voiceRecordBtn');
+
+if (voiceRecordBtn) {
+    // Mobile friendly: touch + mouse
+    voiceRecordBtn.addEventListener('mousedown', startVoiceRecording);
+    voiceRecordBtn.addEventListener('mouseup', stopVoiceRecording);
+    voiceRecordBtn.addEventListener('mouseleave', stopVoiceRecording);
+    
+    voiceRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startVoiceRecording(); });
+    voiceRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopVoiceRecording(); });
+}
+
+async function startVoiceRecording() {
+    if (!dataConnection || !dataConnection.open) {
+        showToast('⚠️ Connect to a chat first');
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderVoice = new MediaRecorder(stream);
+        voiceChunks = [];
+        
+        mediaRecorderVoice.ondataavailable = e => voiceChunks.push(e.data);
+        mediaRecorderVoice.onstop = () => {
+            const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+            sendVoiceMessage(blob);
+            stream.getTracks().forEach(t => t.stop());
+        };
+        
+        mediaRecorderVoice.start();
+        isRecordingVoice = true;
+        voiceRecordBtn.classList.add('recording');
+        voiceRecordBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        showToast('🎙 Recording... Release to send');
+    } catch (err) {
+        showToast('❌ Microphone permission denied');
+    }
+}
+
+function stopVoiceRecording() {
+    if (!isRecordingVoice || !mediaRecorderVoice) return;
+    
+    mediaRecorderVoice.stop();
+    isRecordingVoice = false;
+    voiceRecordBtn.classList.remove('recording');
+    voiceRecordBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+}
+
+function sendVoiceMessage(blob) {
+    const tid = 'voice_' + Date.now();
+    const messageId = createMessageId();
+    const reader = new FileReader();
+    reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        dataConnection.send({ 
+            type: 'voice',
+            id: messageId,
+            from: currentUser ? currentUser.username : userRole,
+            transferId: tid, 
+            data: base64,
+            duration: Math.max(1, Math.round(blob.size / 16000)) 
+        });
+        addVoiceMessageToChat(blob, true, null, messageId, 'sent');
+        if (activeChatUsername) updateChatMeta(activeChatUsername, '🎙 Voice message', Date.now(), true, 'sent');
+    };
+    reader.readAsDataURL(blob);
+}
+
+function addVoiceMessageToChat(blob, isSent, receivedUrl = null, messageId = null, status = 'sent', isHistoryLoad = false, base64 = null) {
+    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername) {
+        let b64 = base64;
+        if (!b64 && blob) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+                    id: messageId, type: 'voice', isSent, status, ts: Date.now(), base64: reader.result
+                });
+            };
+            reader.readAsDataURL(blob);
+        } else if (b64) {
+            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+                id: messageId, type: 'voice', isSent, status, ts: Date.now(), base64: b64
+            });
+        }
+    }
+
+    const div = document.createElement('div');
+    div.className = 'chat-msg voice-msg ' + (isSent ? 'sent' : 'received');
+    if (messageId) div.setAttribute('data-message-id', messageId);
+    let audioUrl = receivedUrl;
+    if (!audioUrl && blob) audioUrl = URL.createObjectURL(blob);
+    else if (!audioUrl && base64) audioUrl = base64;
+    
+    const duration = blob ? Math.max(1, Math.round((blob.size || 16000) / 16000)) : 2;
+    div.innerHTML = `
+        <div class="voice-note-ui">
+            <div class="voice-avatar-ui"><i class="fas fa-user"></i></div>
+            <button class="voice-play-btn" type="button"><i class="fas fa-play"></i></button>
+            <div class="voice-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <span class="voice-duration">0:${String(Math.min(duration, 59)).padStart(2, '0')}</span>
+            <audio src="${audioUrl}"></audio>
+        </div>
+        <div class="msg-meta"><span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>${isSent ? `<i class="msg-status-icon fas ${status === 'sent' ? 'fa-check' : 'fa-check-double'} ${status === 'read' ? 'read-ticks' : 'delivered-ticks'}" data-status="${status}" title="${status}"></i>` : ''}</div>
+    `;
+    const btn = div.querySelector('.voice-play-btn');
+    const audio = div.querySelector('audio');
+    btn.addEventListener('click', () => {
+        if (audio.paused) {
+            audio.play();
+            btn.innerHTML = '<i class="fas fa-pause"></i>';
+            div.classList.add('playing');
+        } else {
+            audio.pause();
+            btn.innerHTML = '<i class="fas fa-play"></i>';
+            div.classList.remove('playing');
+        }
+    });
+    audio.addEventListener('ended', () => { btn.innerHTML = '<i class="fas fa-play"></i>'; div.classList.remove('playing'); });
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 if (fileInput) {
     fileInput.addEventListener('change', () => {
@@ -1064,16 +1547,73 @@ async function sendFile(file) {
     }
     dataConnection.send({ type: 'file-end', transferId: tid });
     addFileToChat(file.name, ab.byteLength, file.type, ab, true);
+    if (activeChatUsername) updateChatMeta(activeChatUsername, '📎 ' + file.name, Date.now(), true, 'sent');
     fileProgress.classList.add('hidden');
     showToast(`✅ ${file.name} sent!`);
 }
 
+function playNotificationSound() {
+    try {
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
+    } catch(e) {}
+}
+
 function handleDataMessage(data) {
     if (!data || !data.type) return;
+    const senderPeer = data.from || (dataConnection && dataConnection.peer) || activeChatUsername || 'friend';
     if (data.type === 'chat') {
-        addChatMessage(data.text, false, data.burn || false);
+        playNotificationSound();
+        addChatMessage(data.text, false, data.burn || false, data.id || null, 'sent', data.reply || null);
+        updateChatMeta(senderPeer, data.burn ? '🔥 View-once message' : (data.text || 'New message'), data.ts || Date.now(), false);
+        markUnreadFromPeer(senderPeer, data.burn ? '🔥 View-once message' : (data.text || 'New message'));
+        if (dataConnection && dataConnection.open && data.id) {
+            dataConnection.send({ type: 'message-delivered', id: data.id, from: currentUser ? currentUser.username : userRole });
+            if (isViewingChatWith(senderPeer)) dataConnection.send({ type: 'message-read', id: data.id, from: currentUser ? currentUser.username : userRole });
+        }
         messageCount++;
         logEvent('chat_message', { text: (data.burn ? "[🔥 VIEW ONCE] " : "") + data.text, sender: userRole === 'creator' ? 'joiner' : 'creator' });
+    }
+    else if (data.type === 'typing') {
+        const typingDiv = document.getElementById('typingIndicator') || createTypingIndicator();
+        typingDiv.style.display = data.isTyping ? 'block' : 'none';
+        if (data.isTyping && senderPeer === activeChatUsername) {
+            updateChatHeader('typing...');
+            clearTimeout(typingRestoreTimer);
+            typingRestoreTimer = setTimeout(() => updateChatHeader(), 2200);
+        } else if (senderPeer === activeChatUsername) {
+            updateChatHeader();
+        }
+    }
+    else if (data.type === 'message-delivered') {
+        updateMessageStatus(data.id, 'delivered');
+    }
+    else if (data.type === 'message-read') {
+        updateMessageStatus(data.id, 'read');
+    }
+    else if (data.type === 'read-chat') {
+        markAllVisibleSentAsRead();
+    }
+    else if (data.type === 'edit-message') {
+        applyMessageEdit(data.id, data.text);
+    }
+    else if (data.type === 'delete-message') {
+        applyMessageDelete(data.id);
+    }
+    else if (data.type === 'reaction-message') {
+        applyMessageReaction(data.id, data.emoji);
     }
     else if (data.type === 'reaction') {
         showFloatingReaction(data.emoji, false);
@@ -1092,31 +1632,94 @@ function handleDataMessage(data) {
         fileProgressText.textContent = `Receiving ${b.metadata.fileName} (${pct}%)`;
     }
     else if (data.type === 'file-end') {
+        playNotificationSound();
         const b = incomingFileBuffers[data.transferId]; if (!b) return;
         const blob = new Blob(b.chunks, { type: b.metadata.mimeType });
         const url = URL.createObjectURL(blob);
         addFileToChat(b.metadata.fileName, b.metadata.fileSize, b.metadata.mimeType, null, false, url, blob);
+        updateChatMeta(senderPeer, '📎 ' + b.metadata.fileName, Date.now());
+        markUnreadFromPeer(senderPeer, '📎 ' + b.metadata.fileName);
         logEvent('file_sent', { fileName: b.metadata.fileName, fileSize: b.metadata.fileSize, sender: userRole === 'creator' ? 'joiner' : 'creator' });
         fileProgress.classList.add('hidden');
         showToast(`📥 ${b.metadata.fileName} received!`);
         delete incomingFileBuffers[data.transferId];
     }
+    else if (data.type === 'voice') {
+        playNotificationSound();
+        // Receive voice message
+        const binary = atob(data.data);
+        const array = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+        const blob = new Blob([array], { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        addVoiceMessageToChat(blob, false, url, data.id || null);
+        updateChatMeta(senderPeer, '🎙 Voice message', Date.now());
+        markUnreadFromPeer(senderPeer, '🎙 Voice message');
+        if (dataConnection && dataConnection.open && data.id) {
+            dataConnection.send({ type: 'message-delivered', id: data.id, from: currentUser ? currentUser.username : userRole });
+            if (isViewingChatWith(senderPeer)) dataConnection.send({ type: 'message-read', id: data.id, from: currentUser ? currentUser.username : userRole });
+        }
+        showToast('🎙 Voice message received');
+    }
 }
 
-function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob) {
+function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob, isHistoryLoad = false, messageId = null, status = 'sent', base64 = null) {
+    if (!messageId) messageId = 'file_' + Date.now();
+    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername) {
+        if (!base64 && blob) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+                    id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64: reader.result
+                });
+            };
+            reader.readAsDataURL(blob);
+        } else if (!base64 && arrayBuffer) {
+            const b64 = arrayBufferToBase64(arrayBuffer);
+            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+                id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64: 'data:' + mimeType + ';base64,' + b64
+            });
+        } else if (base64) {
+            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
+                id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64
+            });
+        }
+    }
+
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (isSent ? 'sent' : 'received');
-    if (isImageFile(fileName)) {
-        let imgSrc;
-        if (isSent && arrayBuffer) { imgSrc = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType })); }
-        else if (blobUrl) { imgSrc = blobUrl; }
-        if (imgSrc) {
-            const img = document.createElement('img'); img.src = imgSrc; img.className = 'chat-image'; img.style.maxWidth = '200px'; img.alt = fileName;
-            div.appendChild(img);
-            const dl = document.createElement('a'); dl.href = imgSrc; dl.download = fileName; dl.className = 'file-download';
-            dl.innerHTML = `<i class="fas fa-download"></i> Download`;
-            div.appendChild(document.createElement('br')); div.appendChild(dl);
-        }
+    div.setAttribute('data-message-id', messageId);
+    let mediaUrl = null;
+    if (isSent && arrayBuffer) mediaUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType }));
+    else if (blobUrl) mediaUrl = blobUrl;
+    else if (base64) mediaUrl = base64;
+
+    if (isImageFile(fileName) && mediaUrl) {
+        const img = document.createElement('img');
+        img.src = mediaUrl;
+        img.className = 'chat-image';
+        img.alt = fileName;
+        img.title = 'Tap to view full screen';
+        img.addEventListener('click', () => openMediaPreview(mediaUrl, 'image', fileName));
+        div.appendChild(img);
+        const dl = document.createElement('a');
+        dl.href = mediaUrl; dl.download = fileName; dl.className = 'file-download';
+        dl.innerHTML = `<i class="fas fa-download"></i> Download`;
+        div.appendChild(dl);
+    } else if (isVideoFile(fileName) && mediaUrl) {
+        const video = document.createElement('video');
+        video.src = mediaUrl;
+        video.className = 'chat-video';
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+        video.title = 'Tap to view full screen';
+        video.addEventListener('dblclick', () => openMediaPreview(mediaUrl, 'video', fileName));
+        div.appendChild(video);
+        const dl = document.createElement('a');
+        dl.href = mediaUrl; dl.download = fileName; dl.className = 'file-download';
+        dl.innerHTML = `<i class="fas fa-download"></i> Download video`;
+        div.appendChild(dl);
     } else {
         const fb = document.createElement('div'); fb.className = 'file-bubble';
         const ic = document.createElement('i'); ic.className = 'fas ' + getFileIcon(fileName); ic.style.color = isSent ? '#fff' : 'var(--wa-teal)';
@@ -1125,13 +1728,14 @@ function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUr
         const ss = document.createElement('span'); ss.className = 'file-size'; ss.textContent = formatFileSize(fileSize);
         info.appendChild(ns); info.appendChild(document.createElement('br')); info.appendChild(ss);
         fb.appendChild(ic); fb.appendChild(info); div.appendChild(fb);
-        if (isSent && arrayBuffer) {
-            const su = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType }));
-            const dl = document.createElement('a'); dl.href = su; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
-        } else if (blobUrl) {
-            const dl = document.createElement('a'); dl.href = blobUrl; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
+        if (mediaUrl) {
+            const dl = document.createElement('a'); dl.href = mediaUrl; dl.download = fileName; dl.className = 'file-download'; dl.innerHTML = '<i class="fas fa-download"></i> Download'; div.appendChild(dl);
         }
     }
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.innerHTML = `<span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
+    div.appendChild(meta);
     chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -1348,6 +1952,8 @@ function initCyberDashboard() {
     document.getElementById('cyberProfileName').textContent = currentUser.display_name;
     document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
 
+    loadUnreadCounts();
+
     // Start background heartbeats & friends polling
     sendHeartbeat();
     if (cyberHeartbeatInterval) clearInterval(cyberHeartbeatInterval);
@@ -1392,6 +1998,8 @@ async function pollFriendsList() {
 }
 
 function renderFriendsList(friends) {
+    lastFriendsCache = friends || [];
+    loadChatPrefs();
     const chatsListEl = document.getElementById('cyberFriendsChatsList');
     const callsListEl = document.getElementById('cyberFriendsCallsList');
     
@@ -1402,26 +2010,47 @@ function renderFriendsList(friends) {
         return;
     }
 
+    const sortedFriends = [...friends].sort((a, b) => {
+        const ap = (chatPrefs[a.username] || {}).pinned ? 1 : 0, bp = (chatPrefs[b.username] || {}).pinned ? 1 : 0;
+        const aa = (chatPrefs[a.username] || {}).archived ? 1 : 0, ba = (chatPrefs[b.username] || {}).archived ? 1 : 0;
+        if (bp !== ap) return bp - ap;
+        if (aa !== ba) return aa - ba;
+        return ((chatMeta[b.username] || {}).lastAt || 0) - ((chatMeta[a.username] || {}).lastAt || 0);
+    });
+
     // 1. Render Chats Tab List
     chatsListEl.innerHTML = '';
-    friends.forEach(f => {
+    sortedFriends.forEach(f => {
         const item = document.createElement('div');
-        item.className = 'cyber-item';
+        item.className = 'cyber-item' + ((chatPrefs[f.username] || {}).archived ? ' archived-chat' : '') + ((chatPrefs[f.username] || {}).pinned ? ' pinned-chat' : '');
+        item.setAttribute('data-chat-username', f.username);
         const statusClass = f.is_online ? 'online' : 'offline';
         const statusText = f.is_online ? 'Online' : 'Offline';
+        const safeDisplayName = encodeURIComponent(String(f.display_name || f.username)).replace(/'/g, '%27');
+        const meta = chatMeta[f.username] || {};
+        const preview = meta.lastMessage || 'Tap to chat or call';
+        const lastTime = formatChatListTime(meta.lastAt);
 
         item.innerHTML = `
             <div class="cyber-item-info">
-                <div class="cyber-item-name">${f.display_name}</div>
-                <div class="cyber-item-id">
+                <div class="cyber-item-name"><span>${(chatPrefs[f.username] || {}).pinned ? '📌 ' : ''}${(chatPrefs[f.username] || {}).muted ? '🔇 ' : ''}${f.display_name}</span><span class="chat-last-time">${lastTime}</span><span class="unread-badge" style="display:none;">0</span></div>
+                <div class="cyber-item-id chat-row-sub">
                     <span class="status-dot ${statusClass}"></span>
-                    @${f.username} (${statusText})
+                    <span class="chat-last-preview">${preview}</span>
                 </div>
+                <div class="chat-row-username">@${f.username} • ${statusText}</div>
             </div>
             <div class="cyber-actions">
-                <button onclick="startFriendChat('${f.username}')" class="btn btn-whatsapp-outline btn-small" style="padding: 6px 10px;" title="Chat with friend">
+                <button onclick="startFriendChat('${f.username}', '${safeDisplayName}')" class="btn btn-whatsapp-outline btn-small quick-call-btn" style="padding: 6px 10px;" title="Chat with friend">
                     <i class="fas fa-comment-dots"></i>
                 </button>
+                <button onclick="startFriendCall('${f.username}', 'audio')" class="btn btn-whatsapp-outline btn-small quick-call-btn" style="padding: 6px 10px; color: var(--wa-teal); border-color: var(--wa-teal);" title="Voice Call" ${f.is_online ? '' : 'disabled'}>
+                    <i class="fas fa-phone-alt"></i>
+                </button>
+                <button onclick="startFriendCall('${f.username}', 'video')" class="btn btn-whatsapp btn-small quick-call-btn" style="padding: 6px 10px;" title="Video Call" ${f.is_online ? '' : 'disabled'}>
+                    <i class="fas fa-video"></i>
+                </button>
+                <button onclick="openChatOptions('${f.username}')" class="btn btn-whatsapp-outline btn-small quick-call-btn" title="Chat options"><i class="fas fa-ellipsis-v"></i></button>
                 <button onclick="removeCyberFriend('${f.username}')" class="btn btn-danger-app btn-small" style="padding: 6px 10px; background: rgba(255, 45, 117, 0.15); border: 1px solid rgba(255, 45, 117, 0.45); color: var(--neon-pink);" title="Remove Friend">
                     <i class="fas fa-user-minus"></i>
                 </button>
@@ -1429,10 +2058,12 @@ function renderFriendsList(friends) {
         `;
         chatsListEl.appendChild(item);
     });
+    updateUnreadBadges();
 
     // 2. Render Calls Tab List (WhatsApp-style: Video Call and Voice Call separate buttons!)
     callsListEl.innerHTML = '';
-    friends.forEach(f => {
+    renderLocalCallHistory();
+    sortedFriends.forEach(f => {
         const item = document.createElement('div');
         item.className = 'cyber-item';
         const statusClass = f.is_online ? 'online' : 'offline';
@@ -1653,24 +2284,53 @@ async function addCyberFriend(friendUsername, btn) {
 }
 window.addCyberFriend = addCyberFriend;
 
-function startFriendChat(friendUsername) {
+function startFriendChat(friendUsername, displayName = null) {
     if (!peer || peer.destroyed) {
         showToast('⚠️ Connecting to Cyber Space...');
         return;
     }
+    activeChatUsername = friendUsername;
+    clearUnreadForPeer(friendUsername);
+    setTimeout(sendReadReceiptForActiveChat, 250);
+    try { activeChatDisplayName = displayName ? decodeURIComponent(displayName) : '@' + friendUsername; }
+    catch(e) { activeChatDisplayName = displayName || '@' + friendUsername; }
     showToast(`💬 Opening chat with @${friendUsername}...`);
     showPage(roomPage);
-    roomIdDisplay.textContent = "DIRECT CHAT";
+    roomIdDisplay.textContent = activeChatDisplayName;
     waitingScreen.style.display = 'none';
+    callScreen.classList.add('hidden');
+    chatPanel.classList.add('direct-chat-mode');
     chatPanel.classList.remove('hidden');
+    updateChatHeader('connecting...');
+    chatMessages.innerHTML = '<div class="chat-date-pill">Today</div><div class="chat-system">Messages and calls are peer-to-peer encrypted 🔒</div>';
     
+    // Load history from IndexedDB
+    if (window.loadMsgsFromDB) {
+        const owner = currentUser ? currentUser.username : 'anon';
+        loadMsgsFromDB(owner, friendUsername).then(msgs => {
+            msgs.forEach(m => {
+                if (m.type === 'text') addChatMessage(m.text, m.isSent, false, m.id, m.status, m.reply, true);
+                else if (m.type === 'voice') addVoiceMessageToChat(null, m.isSent, m.url, m.id, m.status, true, m.base64);
+                else if (m.type === 'file') addFileToChat(m.fileName, m.fileSize, m.mimeType, null, m.isSent, m.url, null, true, m.id, m.status, m.base64);
+            });
+            setTimeout(() => { if(chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
+        });
+    }
+
     // Connect P2P data connection
     dataConnection = peer.connect(friendUsername, { reliable: true });
     dataConnection.on('open', () => {
+        updateChatHeader('online • peer-to-peer connected');
         showToast('⚡ Direct secure chat connected!');
         playSciFiSound('join');
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send({ type: 'typing', isTyping: false, from: currentUser ? currentUser.username : userRole });
+            sendReadReceiptForActiveChat();
+        }
     });
     dataConnection.on('data', handleDataMessage);
+    dataConnection.on('close', () => updateChatHeader('offline'));
+    dataConnection.on('error', () => updateChatHeader('connection failed'));
 }
 window.startFriendChat = startFriendChat;
 
@@ -1679,9 +2339,14 @@ function startFriendCall(friendUsername, callType = 'video') {
         showToast('⚠️ Connecting to Cyber Space...');
         return;
     }
+    activeChatUsername = friendUsername;
+    activeChatDisplayName = '@' + friendUsername;
+    updateChatHeader(callType === 'audio' ? 'voice call ringing...' : 'video call ringing...');
+    recordCallHistory(friendUsername, 'outgoing', callType, 'started');
     showToast(`📞 Starting ${callType} call to @${friendUsername}...`);
     showPage(roomPage);
-    roomIdDisplay.textContent = "DIRECT CALL";
+    roomIdDisplay.textContent = callType === 'audio' ? 'VOICE CALL' : 'VIDEO CALL';
+    chatPanel.classList.remove('direct-chat-mode');
     waitingScreen.style.display = 'flex';
     
     // Set professional Room ID and Role for Telegram Logging
@@ -1817,6 +2482,7 @@ function handleIncomingCyberCall(call) {
     cleanAccept.addEventListener('click', async () => {
         stopRingtone();
         modal.classList.add('hidden');
+        recordCallHistory(call.peer, 'incoming', currentCallMode, 'answered');
         showPage(roomPage);
         roomIdDisplay.textContent = "DIRECT CALL";
         
@@ -1849,6 +2515,7 @@ function handleIncomingCyberCall(call) {
     cleanDecline.addEventListener('click', () => {
         stopRingtone();
         modal.classList.add('hidden');
+        recordCallHistory(call.peer, 'incoming', currentCallMode, 'missed');
         call.close();
         showToast('Call declined');
     });
@@ -1857,11 +2524,23 @@ function handleIncomingCyberCall(call) {
 function handleIncomingCyberConnection(conn) {
     console.log('💬 Direct chat connection from:', conn.peer);
     dataConnection = conn;
+    activeChatUsername = conn.peer;
+    activeChatDisplayName = '@' + conn.peer;
     conn.on('open', () => {
+        updateChatHeader('online • peer-to-peer connected');
         showToast(`💬 @${conn.peer} opened a chat with you!`);
     });
     conn.on('data', handleDataMessage);
-    conn.on('close', () => console.log('Data connection closed'));
+    conn.on('close', () => { updateChatHeader('offline'); console.log('Data connection closed'); });
+}
+
+function createTypingIndicator() {
+    const div = document.createElement('div');
+    div.id = 'typingIndicator';
+    div.style.cssText = 'display:none; padding:6px 14px; font-size:0.8rem; color:#8696a0;';
+    div.innerHTML = `<i class="fas fa-ellipsis-h"></i> typing...`;
+    chatMessages.appendChild(div);
+    return div;
 }
 
 // Check session on load
@@ -1882,6 +2561,8 @@ function checkCyberSession() {
             document.getElementById('cyberDashboardBox').classList.remove('hidden');
             document.getElementById('cyberProfileName').textContent = currentUser.display_name;
             document.getElementById('cyberProfileId').textContent = '@' + currentUser.username;
+
+            loadUnreadCounts();
 
             // Start background heartbeats & friends polling
             sendHeartbeat();
@@ -1983,3 +2664,173 @@ function updateControlButtons() {
 checkUrlForRoom();
 checkFilePreview();
 checkCyberSession();
+
+// ============ WhatsApp Pro Pack: message menu, emoji, attachment, search, media preview ============
+function getMessageTextForAction(el) {
+    return (el.querySelector('.msg-text') || el.querySelector('.file-name') || el.querySelector('.voice-duration') || {}).textContent || 'Media message';
+}
+function applyMessageReaction(id, emoji) {
+    const el = chatMessages && chatMessages.querySelector(`[data-message-id="${id}"]`);
+    if (!el) return;
+    let r = el.querySelector('.message-reaction');
+    if (!r) { r = document.createElement('span'); r.className = 'message-reaction'; el.appendChild(r); }
+    r.textContent = emoji;
+}
+function applyMessageEdit(id, text) {
+    const el = chatMessages && chatMessages.querySelector(`[data-message-id="${id}"]`);
+    if (!el) return;
+    const t = el.querySelector('.msg-text');
+    if (t) t.textContent = text;
+    el.classList.add('edited-message');
+    if (!el.querySelector('.edited-label')) {
+        const label = document.createElement('span'); label.className = 'edited-label'; label.textContent = ' edited';
+        const meta = el.querySelector('.msg-meta'); if (meta) meta.prepend(label);
+    }
+}
+function applyMessageDelete(id) {
+    const el = chatMessages && chatMessages.querySelector(`[data-message-id="${id}"]`);
+    if (!el) return;
+    el.classList.add('deleted-message');
+    el.innerHTML = '<span class="msg-text"><i class="fas fa-ban"></i> This message was deleted</span><div class="msg-meta"><span>' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '</span></div>';
+}
+function showMessageActionMenu(messageEl, x, y) {
+    if (!messageEl || !messageEl.classList.contains('chat-msg')) return;
+    const old = document.getElementById('msgActionMenu'); if (old) old.remove();
+    const id = messageEl.getAttribute('data-message-id');
+    const isSent = messageEl.classList.contains('sent');
+    const canEdit = isSent && id && messageEl.querySelector('.msg-text') && !messageEl.classList.contains('deleted-message');
+    const menu = document.createElement('div');
+    menu.id = 'msgActionMenu';
+    menu.className = 'msg-action-menu';
+    menu.style.left = Math.min(x, window.innerWidth - 210) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 260) + 'px';
+    menu.innerHTML = `
+        <button data-act="reply"><i class="fas fa-reply"></i> Reply</button>
+        <button data-act="react"><i class="far fa-smile"></i> React</button>
+        ${canEdit ? '<button data-act="edit"><i class="fas fa-pen"></i> Edit</button>' : ''}
+        <button data-act="copy"><i class="fas fa-copy"></i> Copy</button>
+        <button data-act="delete-me"><i class="fas fa-trash"></i> Delete for me</button>
+        ${id ? '<button data-act="delete-all"><i class="fas fa-trash-alt"></i> Delete for everyone</button>' : ''}
+    `;
+    document.body.appendChild(menu);
+    menu.addEventListener('click', (e) => {
+        const btn = e.target.closest('button'); if (!btn) return;
+        const act = btn.dataset.act;
+        if (act === 'reply') setReplyMode(messageEl);
+        if (act === 'copy') navigator.clipboard && navigator.clipboard.writeText(getMessageTextForAction(messageEl));
+        if (act === 'react') showReactionPicker(messageEl, menu.getBoundingClientRect().left, menu.getBoundingClientRect().bottom);
+        if (act === 'edit') {
+            const oldText = getMessageTextForAction(messageEl);
+            const nt = prompt('Edit message:', oldText);
+            if (nt && nt.trim() && id) {
+                applyMessageEdit(id, nt.trim());
+                if (dataConnection && dataConnection.open) dataConnection.send({ type:'edit-message', id, text: nt.trim(), from: currentUser ? currentUser.username : userRole });
+            }
+        }
+        if (act === 'delete-me') messageEl.remove();
+        if (act === 'delete-all' && id && confirm('Delete for everyone?')) {
+            applyMessageDelete(id);
+            if (dataConnection && dataConnection.open) dataConnection.send({ type:'delete-message', id, from: currentUser ? currentUser.username : userRole });
+        }
+        if (act !== 'react') menu.remove();
+    });
+    setTimeout(() => document.addEventListener('click', function close(ev){ if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', close); } }), 0);
+}
+function showReactionPicker(messageEl, x, y) {
+    const old = document.getElementById('reactionPicker'); if (old) old.remove();
+    const id = messageEl.getAttribute('data-message-id');
+    const picker = document.createElement('div');
+    picker.id = 'reactionPicker'; picker.className = 'reaction-picker'; picker.style.left = x + 'px'; picker.style.top = y + 'px';
+    ['❤️','😂','👍','🔥','😮','😢'].forEach(em => {
+        const b = document.createElement('button'); b.textContent = em; b.onclick = () => {
+            if (id) {
+                applyMessageReaction(id, em);
+                if (dataConnection && dataConnection.open) dataConnection.send({ type:'reaction-message', id, emoji: em, from: currentUser ? currentUser.username : userRole });
+            }
+            picker.remove(); const m = document.getElementById('msgActionMenu'); if (m) m.remove();
+        };
+        picker.appendChild(b);
+    });
+    document.body.appendChild(picker);
+}
+function initMessageGestures() {
+    if (!chatMessages || chatMessages.dataset.gesturesReady) return;
+    chatMessages.dataset.gesturesReady = '1';
+    let pressTimer = null;
+    chatMessages.addEventListener('contextmenu', e => {
+        const msg = e.target.closest('.chat-msg'); if (!msg) return;
+        e.preventDefault(); showMessageActionMenu(msg, e.clientX, e.clientY);
+    });
+    chatMessages.addEventListener('touchstart', e => {
+        const msg = e.target.closest('.chat-msg'); if (!msg) return;
+        pressTimer = setTimeout(() => showMessageActionMenu(msg, e.touches[0].clientX, e.touches[0].clientY), 550);
+    }, {passive:true});
+    ['touchend','touchmove','touchcancel'].forEach(ev => chatMessages.addEventListener(ev, () => clearTimeout(pressTimer), {passive:true}));
+}
+function initEmojiAndAttachmentMenus() {
+    const emojiBtn = document.querySelector('.composer-pill .composer-icon[title="Emoji"]');
+    if (emojiBtn && !emojiBtn.dataset.ready) {
+        emojiBtn.dataset.ready = '1';
+        emojiBtn.onclick = () => {
+            let p = document.getElementById('emojiPickerPanel');
+            if (p) { p.remove(); return; }
+            p = document.createElement('div'); p.id = 'emojiPickerPanel'; p.className = 'emoji-picker-panel';
+            '😀 😃 😂 🤣 😊 😍 😘 😎 😢 😭 😡 👍 👎 ❤️ 🔥 🎉 🙏 💯'.split(' ').forEach(em => {
+                const b = document.createElement('button'); b.textContent = em; b.onclick = () => { chatInput.value += em; updateChatComposer(); chatInput.focus(); };
+                p.appendChild(b);
+            });
+            whatsappComposer.parentNode.insertBefore(p, whatsappComposer);
+        };
+    }
+    if (attachFileBtn && !attachFileBtn.dataset.menuReady) {
+        attachFileBtn.dataset.menuReady = '1';
+    }
+}
+function initChatSearchButton() {
+    const actions = document.querySelector('.chat-header-actions');
+    if (!actions || document.getElementById('chatSearchBtn')) return;
+    const btn = document.createElement('button'); btn.id = 'chatSearchBtn'; btn.className = 'chat-head-btn'; btn.title = 'Search chat'; btn.innerHTML = '<i class="fas fa-search"></i>';
+    actions.insertBefore(btn, actions.firstChild);
+    btn.onclick = () => {
+        let bar = document.getElementById('chatSearchBar');
+        if (bar) { bar.remove(); document.querySelectorAll('.chat-msg').forEach(m => m.style.display = ''); return; }
+        bar = document.createElement('div'); bar.id = 'chatSearchBar'; bar.className = 'chat-search-bar';
+        bar.innerHTML = '<i class="fas fa-search"></i><input placeholder="Search messages"/><button><i class="fas fa-times"></i></button>';
+        chatMessages.parentNode.insertBefore(bar, chatMessages);
+        const input = bar.querySelector('input');
+        input.oninput = () => {
+            const q = input.value.toLowerCase();
+            document.querySelectorAll('.chat-msg').forEach(m => { m.style.display = !q || m.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+        };
+        bar.querySelector('button').onclick = () => { bar.remove(); document.querySelectorAll('.chat-msg').forEach(m => m.style.display = ''); };
+        input.focus();
+    };
+}
+function openMediaPreview(src, type, name='media') {
+    let o = document.getElementById('mediaPreviewOverlay'); if (o) o.remove();
+    o = document.createElement('div'); o.id = 'mediaPreviewOverlay'; o.className = 'media-preview-overlay';
+    o.innerHTML = `<div class="media-preview-top"><span>${name}</span><button><i class="fas fa-times"></i></button></div><div class="media-preview-body">${type === 'video' ? `<video src="${src}" controls autoplay playsinline></video>` : `<img src="${src}" alt="${name}">`}</div>`;
+    o.querySelector('button').onclick = () => o.remove();
+    document.body.appendChild(o);
+}
+function openChatOptions(username) {
+    loadChatPrefs();
+    const p = chatPrefs[username] || {};
+    const choice = prompt(`Options for @${username}\n1. ${p.pinned ? 'Unpin' : 'Pin'} chat\n2. ${p.muted ? 'Unmute' : 'Mute'} chat\n3. ${p.archived ? 'Unarchive' : 'Archive'} chat\n\nType 1, 2 or 3:`);
+    if (!choice) return;
+    chatPrefs[username] = p;
+    if (choice.trim() === '1') p.pinned = !p.pinned;
+    if (choice.trim() === '2') p.muted = !p.muted;
+    if (choice.trim() === '3') p.archived = !p.archived;
+    saveChatPrefs();
+    renderFriendsList(lastFriendsCache);
+    showToast(`Updated @${username}`);
+}
+window.openChatOptions = openChatOptions;
+function initWhatsAppProPack() {
+    initMessageGestures();
+    initEmojiAndAttachmentMenus();
+    initChatSearchButton();
+    renderLocalCallHistory();
+}
+setTimeout(initWhatsAppProPack, 500);
