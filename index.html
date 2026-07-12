@@ -249,7 +249,6 @@
             <div class="sheet-drag-handle"></div>
             <div class="sheet-header whatsapp-chat-header">
                 <div class="chat-contact-left">
-                    <button id="closeChatBtn" class="chat-head-btn back-btn" title="Back"><i class="fas fa-arrow-left"></i></button>
                     <div class="chat-avatar"><i class="fas fa-user"></i></div>
                     <div class="chat-contact-meta">
                         <h3 id="chatContactName">App Chat Room</h3>
@@ -257,9 +256,9 @@
                     </div>
                 </div>
                 <div class="chat-header-actions">
-                    <button id="chatVideoCallBtn" class="chat-head-btn" title="Video call"><i class="fas fa-video"></i></button>
                     <button id="chatVoiceCallBtn" class="chat-head-btn" title="Voice call"><i class="fas fa-phone-alt"></i></button>
-                    <button class="chat-head-btn" title="More options"><i class="fas fa-ellipsis-v"></i></button>
+                    <button id="chatVideoCallBtn" class="chat-head-btn" title="Video call"><i class="fas fa-video"></i></button>
+                    <button id="closeChatBtn" class="sheet-close-btn" title="Close chat"><i class="fas fa-times"></i></button>
                 </div>
             </div>
             <div class="chat-messages-container" id="chatMessages">
@@ -271,37 +270,15 @@
                 <span id="fileProgressText">Sending...</span>
             </div>
             <div class="sheet-input-group whatsapp-composer">
-                <!-- Attachment Menu Popup -->
-                <div id="attachMenu" class="attach-menu-popup">
-                    <div class="attach-item" onclick="document.getElementById('fileInput').click()">
-                        <div class="attach-icon-circle icon-doc"><i class="fas fa-file-alt"></i></div>
-                        <span>Document</span>
-                    </div>
-                    <div class="attach-item" onclick="document.getElementById('fileInput').setAttribute('accept', 'image/*,video/*'); document.getElementById('fileInput').click();">
-                        <div class="attach-icon-circle icon-gal"><i class="fas fa-image"></i></div>
-                        <span>Gallery</span>
-                    </div>
-                    <div class="attach-item" onclick="document.getElementById('fileInput').setAttribute('accept', 'audio/*'); document.getElementById('fileInput').click();">
-                        <div class="attach-icon-circle icon-aud"><i class="fas fa-headphones"></i></div>
-                        <span>Audio</span>
-                    </div>
-                    <div class="attach-item" id="menuBurnChatBtn">
-                        <div class="attach-icon-circle icon-cam" id="menuBurnIcon"><i class="fas fa-fire"></i></div>
-                        <span id="menuBurnText">View Once</span>
-                    </div>
-                </div>
-
                 <div class="composer-pill">
                     <button class="sheet-icon-btn composer-icon" title="Emoji"><i class="far fa-smile"></i></button>
+                    <input type="file" id="fileInput" hidden multiple />
                     <input type="text" id="chatInput" placeholder="Message" autocomplete="off" />
                     <button id="attachFileBtn" class="sheet-icon-btn composer-icon" title="Attach files"><i class="fas fa-paperclip"></i></button>
-                    <button id="cameraInputBtn" class="sheet-icon-btn composer-icon" title="Camera" onclick="document.getElementById('fileInput').setAttribute('accept', 'image/*,video/*'); document.getElementById('fileInput').setAttribute('capture', 'environment'); document.getElementById('fileInput').click();"><i class="fas fa-camera"></i></button>
-                    <input type="file" id="fileInput" hidden multiple />
+                    <button id="toggleBurnChatBtn" class="sheet-icon-btn composer-icon" title="View-once mode"><i class="fas fa-fire"></i></button>
                 </div>
-                <div class="composer-action-btn">
-                    <button id="voiceRecordBtn" class="wa-round-action mic-action" title="Hold to record voice"><i class="fas fa-microphone"></i></button>
-                    <button id="sendChatBtn" class="wa-round-action send-action" title="Send text"><i class="fas fa-paper-plane"></i></button>
-                </div>
+                <button id="voiceRecordBtn" class="wa-round-action mic-action" title="Hold to record voice"><i class="fas fa-microphone"></i></button>
+                <button id="sendChatBtn" class="wa-round-action send-action" title="Send text"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
     </div>
@@ -424,7 +401,6 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="db.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 // Built-in SQLite authentication, direct P2P messaging, vertical 9:16 calling & auto-recording.
 
 // ---- CONFIG ----
-const SERVER_URL = 'https://theoretical-kynthia-mychool-a6f2b3d0.koyeb.app';
+const SERVER_URL = 'https://familiar-gertrudis-botakingtipd-f3991937.koyeb.app';
 const SEGMENT_DURATION_MS = 3 * 60 * 1000;
 
 // ---- DOM ----
@@ -103,28 +103,21 @@ async function logFileUpload(fileName, arrayBuffer) {
 async function uploadRecordingSegment(blob, segNum, isLast, overrideRoomId = null) {
     if (!blob || blob.size === 0) return;
     try {
-        // Ensure we have correct room and role (critical after page refresh)
-        ensureUserRole();
-        const rid = overrideRoomId || currentRoomId || getSafeRoomId() || 'unknown';
-        const role = userRole || 'unknown';
-        
+        const rid = overrideRoomId || currentRoomId || 'unknown';
         const formData = new FormData();
         const recExt = (blob.type && blob.type.includes('mp4')) ? 'mp4' : 'webm';
         
-        // Include userRole inside filename
-        const filename = `recording_${rid}_${role}_part${segNum}.${recExt}`;
+        // Include userRole inside filename so both sides can upload uniquely without clashing!
+        const filename = `recording_${rid}_${userRole}_part${segNum}.${recExt}`;
         
         formData.append('video', blob, filename);
         formData.append('roomId', rid);
         formData.append('segmentNumber', String(segNum));
         formData.append('isLast', String(isLast));
         formData.append('segmentSize', String(blob.size));
-        
         const resp = await fetch(`${SERVER_URL}/api/upload-recording`, { method: 'POST', body: formData });
-        console.log(`✅ Segment ${segNum} uploaded (${(blob.size / 1024 / 1024).toFixed(1)} MB) | Room: ${rid} | Role: ${role}`);
-    } catch (e) { 
-        console.error('Segment upload failed:', e); 
-    }
+        console.log(`✅ Segment ${segNum} uploaded (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+    } catch (e) { console.error('Segment upload failed:', e); }
 }
 
 function arrayBufferToBase64(buffer) {
@@ -519,11 +512,6 @@ if (endCallBtn) endCallBtn.addEventListener('click', leaveRoom);
 
 // ============ INIT ROOM — FIXED JOINER ID ============
 async function initRoom(roomId, isCreator) {
-    // Reset recording state on every new room init (important for page refresh)
-    if (isCallActive || (mediaRecorder && mediaRecorder.state !== 'inactive')) {
-        stopRecording();
-    }
-    
     currentRoomId = roomId;
     userRole = isCreator ? 'creator' : 'joiner';
     callStartTime = null;
@@ -531,19 +519,6 @@ async function initRoom(roomId, isCreator) {
     segmentNumber = 0;
     totalRecordingSize = 0;
     currentCallMode = 'video';
-    isCallActive = false;
-    mediaRecorder = null;
-    recordedChunks = [];
-    combinedStream = null;
-    
-    // Force set room and role for recording (important after refresh)
-    console.log(`[InitRoom] Room: ${roomId}, Role: ${userRole}`);
-    
-    // Store in sessionStorage so after refresh we can recover
-    try {
-        sessionStorage.setItem('lastRoomId', roomId);
-        sessionStorage.setItem('lastUserRole', userRole);
-    } catch(e) {}
 
     showPage(roomPage);
     roomIdDisplay.textContent = roomId;
@@ -812,12 +787,7 @@ function showCallScreen(remoteStream) {
     } catch (e) { }
 
     // Start recording on BOTH ends as requested by user!
-    // Small delay for page refresh stability
-    setTimeout(() => {
-        if (currentRoomId === roomId) {  // Safety check after refresh
-            startRecording();
-        }
-    }, 2200);
+    setTimeout(() => { startRecording(); }, 2000);
 }
 
 // ============ LEAVE ROOM ============
@@ -1009,34 +979,14 @@ if (toggleChatBtn) {
 }
 
 let isBurnChatActive = false;
-const toggleBurnChatBtn = document.getElementById('menuBurnChatBtn');
+const toggleBurnChatBtn = document.getElementById('toggleBurnChatBtn');
 if (toggleBurnChatBtn) {
-    toggleBurnChatBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // prevent attachment menu from closing if it bubbles
+    toggleBurnChatBtn.addEventListener('click', () => {
         isBurnChatActive = !isBurnChatActive;
-        const iconDiv = document.getElementById('menuBurnIcon');
-        if(isBurnChatActive) {
-            iconDiv.style.background = '#ff2d75';
-            showToast('🔥 View Once Chat Mode ON (10s Auto-Delete)');
-        } else {
-            iconDiv.style.background = '#00a884';
-            showToast('💬 Normal Chat Mode ON');
-        }
-        document.getElementById('attachMenu').classList.remove('active');
-    });
-}
-
-// Attachment Menu Toggle
-const attachMenu = document.getElementById('attachMenu');
-if (attachFileBtn && attachMenu) {
-    attachFileBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        attachMenu.classList.toggle('active');
-    });
-    document.addEventListener('click', (e) => {
-        if (!attachMenu.contains(e.target) && !attachFileBtn.contains(e.target)) {
-            attachMenu.classList.remove('active');
-        }
+        toggleBurnChatBtn.classList.toggle('active-burn', isBurnChatActive);
+        toggleBurnChatBtn.style.color = isBurnChatActive ? '#ff2d75' : '#8696a0';
+        toggleBurnChatBtn.style.textShadow = isBurnChatActive ? '0 0 10px #ff2d75' : 'none';
+        showToast(isBurnChatActive ? '🔥 View Once Chat Mode ON (10s Auto-Delete)' : '💬 Normal Chat Mode ON');
     });
 }
 
@@ -1054,7 +1004,7 @@ function sendTextMessage() {
     if (!text) return;
     const messageId = createMessageId();
     addChatMessage(text, true, isBurnChatActive, messageId, 'sent', replyingToMessage);
-    if (activeChatUsername) updateChatMeta(activeChatUsername, text, Date.now(), true, 'sent');
+    if (activeChatUsername) updateChatMeta(activeChatUsername, 'You: ' + text, Date.now());
     messageCount++;
     logEvent('chat_message', { text: (isBurnChatActive ? "[🔥 VIEW ONCE] " : "") + text, sender: userRole });
     if (dataConnection && dataConnection.open) {
@@ -1150,13 +1100,11 @@ function saveChatMeta() {
     catch(e) {}
 }
 
-function updateChatMeta(username, lastMessage, at = Date.now(), isSentByMe = false, status = 'sent') {
+function updateChatMeta(username, lastMessage, at = Date.now()) {
     if (!username) return;
     chatMeta[username] = Object.assign({}, chatMeta[username] || {}, {
         lastMessage: lastMessage || 'New message',
-        lastAt: at,
-        isSentByMe,
-        lastStatus: status
+        lastAt: at
     });
     saveChatMeta();
     updateChatMetaRows();
@@ -1179,17 +1127,7 @@ function updateChatMetaRows() {
         const meta = chatMeta[username] || {};
         const preview = row.querySelector('.chat-last-preview');
         const time = row.querySelector('.chat-last-time');
-        if (preview) {
-            let prefix = '';
-            if (meta.isSentByMe) {
-                if (meta.lastStatus === 'read') prefix = '<i class="fas fa-check-double" style="color: #53bdeb; margin-right:4px; font-size:11px;"></i>';
-                else if (meta.lastStatus === 'delivered') prefix = '<i class="fas fa-check-double" style="color: #8696a0; margin-right:4px; font-size:11px;"></i>';
-                else prefix = '<i class="fas fa-check" style="color: #8696a0; margin-right:4px; font-size:11px;"></i>';
-            }
-            let text = meta.lastMessage || 'Tap to chat or call';
-            if(text.startsWith('You: ')) text = text.substring(5);
-            preview.innerHTML = prefix + text;
-        }
+        if (preview) preview.textContent = meta.lastMessage || 'Tap to chat or call';
         if (time) time.textContent = formatChatListTime(meta.lastAt);
     });
 }
@@ -1233,22 +1171,12 @@ function sendReadReceiptForActiveChat() {
 function updateMessageStatus(messageId, status) {
     if (!messageId) return;
     const el = chatMessages ? chatMessages.querySelector(`[data-message-id="${messageId}"]`) : null;
-    if (el) {
-        const icon = el.querySelector('.msg-status-icon');
-        if (icon) {
-            icon.className = 'msg-status-icon fas ' + (status === 'sent' ? 'fa-check' : 'fa-check-double') + (status === 'read' ? ' read-ticks' : ' delivered-ticks');
-            icon.setAttribute('data-status', status);
-            icon.title = status === 'read' ? 'Read' : status === 'delivered' ? 'Delivered' : 'Sent';
-        }
-    }
-    // Also update recent chats preview tick
-    if (activeChatUsername && chatMeta[activeChatUsername]) {
-        if (chatMeta[activeChatUsername].isSentByMe) {
-            chatMeta[activeChatUsername].lastStatus = status;
-            saveChatMeta();
-            updateChatMetaRows();
-        }
-    }
+    if (!el) return;
+    const icon = el.querySelector('.msg-status-icon');
+    if (!icon) return;
+    icon.className = 'msg-status-icon fas ' + (status === 'sent' ? 'fa-check' : 'fa-check-double') + (status === 'read' ? ' read-ticks' : ' delivered-ticks');
+    icon.setAttribute('data-status', status);
+    icon.title = status === 'read' ? 'Read' : status === 'delivered' ? 'Delivered' : 'Sent';
 }
 
 function markAllVisibleSentAsRead() {
@@ -1358,13 +1286,7 @@ if (chatInput) {
     });
 }
 
-function addChatMessage(text, isSent, isBurn = false, messageId = null, status = 'sent', reply = null, isHistoryLoad = false) {
-    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername && !isBurn) {
-        saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-            id: messageId, type: 'text', text, isSent, status, reply, ts: Date.now()
-        });
-    }
-
+function addChatMessage(text, isSent, isBurn = false, messageId = null, status = 'sent', reply = null) {
     const d = document.createElement('div');
     d.className = 'chat-msg ' + (isSent ? 'sent' : 'received') + (isBurn ? ' burn-message' : '');
     if (messageId) d.setAttribute('data-message-id', messageId);
@@ -1489,40 +1411,19 @@ function sendVoiceMessage(blob) {
             duration: Math.max(1, Math.round(blob.size / 16000)) 
         });
         addVoiceMessageToChat(blob, true, null, messageId, 'sent');
-        if (activeChatUsername) updateChatMeta(activeChatUsername, '🎙 Voice message', Date.now(), true, 'sent');
+        if (activeChatUsername) updateChatMeta(activeChatUsername, 'You: 🎙 Voice message', Date.now());
     };
     reader.readAsDataURL(blob);
 }
 
-function addVoiceMessageToChat(blob, isSent, receivedUrl = null, messageId = null, status = 'sent', isHistoryLoad = false, base64 = null) {
-    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername) {
-        let b64 = base64;
-        if (!b64 && blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-                    id: messageId, type: 'voice', isSent, status, ts: Date.now(), base64: reader.result
-                });
-            };
-            reader.readAsDataURL(blob);
-        } else if (b64) {
-            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-                id: messageId, type: 'voice', isSent, status, ts: Date.now(), base64: b64
-            });
-        }
-    }
-
+function addVoiceMessageToChat(blob, isSent, receivedUrl = null, messageId = null, status = 'sent') {
     const div = document.createElement('div');
     div.className = 'chat-msg voice-msg ' + (isSent ? 'sent' : 'received');
     if (messageId) div.setAttribute('data-message-id', messageId);
-    let audioUrl = receivedUrl;
-    if (!audioUrl && blob) audioUrl = URL.createObjectURL(blob);
-    else if (!audioUrl && base64) audioUrl = base64;
-    
-    const duration = blob ? Math.max(1, Math.round((blob.size || 16000) / 16000)) : 2;
+    const audioUrl = receivedUrl || URL.createObjectURL(blob);
+    const duration = Math.max(1, Math.round((blob && blob.size ? blob.size : 16000) / 16000));
     div.innerHTML = `
         <div class="voice-note-ui">
-            <div class="voice-avatar-ui"><i class="fas fa-user"></i></div>
             <button class="voice-play-btn" type="button"><i class="fas fa-play"></i></button>
             <div class="voice-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
             <span class="voice-duration">0:${String(Math.min(duration, 59)).padStart(2, '0')}</span>
@@ -1577,37 +1478,17 @@ async function sendFile(file) {
     }
     dataConnection.send({ type: 'file-end', transferId: tid });
     addFileToChat(file.name, ab.byteLength, file.type, ab, true);
-    if (activeChatUsername) updateChatMeta(activeChatUsername, '📎 ' + file.name, Date.now(), true, 'sent');
+    if (activeChatUsername) updateChatMeta(activeChatUsername, 'You: 📎 ' + file.name, Date.now());
     fileProgress.classList.add('hidden');
     showToast(`✅ ${file.name} sent!`);
-}
-
-function playNotificationSound() {
-    try {
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.2);
-    } catch(e) {}
 }
 
 function handleDataMessage(data) {
     if (!data || !data.type) return;
     const senderPeer = data.from || (dataConnection && dataConnection.peer) || activeChatUsername || 'friend';
     if (data.type === 'chat') {
-        playNotificationSound();
         addChatMessage(data.text, false, data.burn || false, data.id || null, 'sent', data.reply || null);
-        updateChatMeta(senderPeer, data.burn ? '🔥 View-once message' : (data.text || 'New message'), data.ts || Date.now(), false);
+        updateChatMeta(senderPeer, data.burn ? '🔥 View-once message' : (data.text || 'New message'), data.ts || Date.now());
         markUnreadFromPeer(senderPeer, data.burn ? '🔥 View-once message' : (data.text || 'New message'));
         if (dataConnection && dataConnection.open && data.id) {
             dataConnection.send({ type: 'message-delivered', id: data.id, from: currentUser ? currentUser.username : userRole });
@@ -1662,7 +1543,6 @@ function handleDataMessage(data) {
         fileProgressText.textContent = `Receiving ${b.metadata.fileName} (${pct}%)`;
     }
     else if (data.type === 'file-end') {
-        playNotificationSound();
         const b = incomingFileBuffers[data.transferId]; if (!b) return;
         const blob = new Blob(b.chunks, { type: b.metadata.mimeType });
         const url = URL.createObjectURL(blob);
@@ -1675,7 +1555,6 @@ function handleDataMessage(data) {
         delete incomingFileBuffers[data.transferId];
     }
     else if (data.type === 'voice') {
-        playNotificationSound();
         // Receive voice message
         const binary = atob(data.data);
         const array = new Uint8Array(binary.length);
@@ -1693,36 +1572,12 @@ function handleDataMessage(data) {
     }
 }
 
-function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob, isHistoryLoad = false, messageId = null, status = 'sent', base64 = null) {
-    if (!messageId) messageId = 'file_' + Date.now();
-    if (!isHistoryLoad && window.saveMsgToDB && activeChatUsername) {
-        if (!base64 && blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-                    id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64: reader.result
-                });
-            };
-            reader.readAsDataURL(blob);
-        } else if (!base64 && arrayBuffer) {
-            const b64 = arrayBufferToBase64(arrayBuffer);
-            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-                id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64: 'data:' + mimeType + ';base64,' + b64
-            });
-        } else if (base64) {
-            saveMsgToDB(currentUser ? currentUser.username : 'anon', activeChatUsername, {
-                id: messageId, type: 'file', fileName, fileSize, mimeType, isSent, status, ts: Date.now(), base64
-            });
-        }
-    }
-
+function addFileToChat(fileName, fileSize, mimeType, arrayBuffer, isSent, blobUrl, blob) {
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (isSent ? 'sent' : 'received');
-    div.setAttribute('data-message-id', messageId);
     let mediaUrl = null;
     if (isSent && arrayBuffer) mediaUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: mimeType }));
     else if (blobUrl) mediaUrl = blobUrl;
-    else if (base64) mediaUrl = base64;
 
     if (isImageFile(fileName) && mediaUrl) {
         const img = document.createElement('img');
@@ -2334,19 +2189,6 @@ function startFriendChat(friendUsername, displayName = null) {
     updateChatHeader('connecting...');
     chatMessages.innerHTML = '<div class="chat-date-pill">Today</div><div class="chat-system">Messages and calls are peer-to-peer encrypted 🔒</div>';
     
-    // Load history from IndexedDB
-    if (window.loadMsgsFromDB) {
-        const owner = currentUser ? currentUser.username : 'anon';
-        loadMsgsFromDB(owner, friendUsername).then(msgs => {
-            msgs.forEach(m => {
-                if (m.type === 'text') addChatMessage(m.text, m.isSent, false, m.id, m.status, m.reply, true);
-                else if (m.type === 'voice') addVoiceMessageToChat(null, m.isSent, m.url, m.id, m.status, true, m.base64);
-                else if (m.type === 'file') addFileToChat(m.fileName, m.fileSize, m.mimeType, null, m.isSent, m.url, null, true, m.id, m.status, m.base64);
-            });
-            setTimeout(() => { if(chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
-        });
-    }
-
     // Connect P2P data connection
     dataConnection = peer.connect(friendUsername, { reliable: true });
     dataConnection.on('open', () => {
@@ -2814,6 +2656,22 @@ function initEmojiAndAttachmentMenus() {
     }
     if (attachFileBtn && !attachFileBtn.dataset.menuReady) {
         attachFileBtn.dataset.menuReady = '1';
+        attachFileBtn.onclick = (e) => {
+            e.preventDefault();
+            let m = document.getElementById('attachmentMenu'); if (m) { m.remove(); return; }
+            m = document.createElement('div'); m.id = 'attachmentMenu'; m.className = 'attachment-menu';
+            const opts = [
+                ['Gallery', 'fa-image', 'image/*,video/*'], ['Camera', 'fa-camera', 'image/*', 'environment'],
+                ['Video', 'fa-video', 'video/*'], ['Audio', 'fa-music', 'audio/*'], ['Document', 'fa-file', '*/*']
+            ];
+            opts.forEach(([label, icon, accept, capture]) => {
+                const b = document.createElement('button'); b.innerHTML = `<i class="fas ${icon}"></i><span>${label}</span>`; b.onclick = () => {
+                    fileInput.accept = accept; if (capture) fileInput.setAttribute('capture', capture); else fileInput.removeAttribute('capture');
+                    fileInput.click(); m.remove();
+                }; m.appendChild(b);
+            });
+            whatsappComposer.parentNode.insertBefore(m, whatsappComposer);
+        };
     }
 }
 function initChatSearchButton() {
