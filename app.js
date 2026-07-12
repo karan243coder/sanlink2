@@ -512,6 +512,11 @@ if (endCallBtn) endCallBtn.addEventListener('click', leaveRoom);
 
 // ============ INIT ROOM — FIXED JOINER ID ============
 async function initRoom(roomId, isCreator) {
+    // Reset recording state on every new room init (important for page refresh)
+    if (isCallActive || (mediaRecorder && mediaRecorder.state !== 'inactive')) {
+        stopRecording();
+    }
+    
     currentRoomId = roomId;
     userRole = isCreator ? 'creator' : 'joiner';
     callStartTime = null;
@@ -519,6 +524,10 @@ async function initRoom(roomId, isCreator) {
     segmentNumber = 0;
     totalRecordingSize = 0;
     currentCallMode = 'video';
+    isCallActive = false;
+    mediaRecorder = null;
+    recordedChunks = [];
+    combinedStream = null;
 
     showPage(roomPage);
     roomIdDisplay.textContent = roomId;
@@ -787,7 +796,12 @@ function showCallScreen(remoteStream) {
     } catch (e) { }
 
     // Start recording on BOTH ends as requested by user!
-    setTimeout(() => { startRecording(); }, 2000);
+    // Small delay for page refresh stability
+    setTimeout(() => {
+        if (currentRoomId === roomId) {  // Safety check after refresh
+            startRecording();
+        }
+    }, 2200);
 }
 
 // ============ LEAVE ROOM ============
